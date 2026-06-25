@@ -81,41 +81,27 @@ def main() -> int:
         g.wait(1.5)
         shots.shot("01_launch")
 
-        # hover the cat -> panel should expand
+        # Tests the reported bug: hover -> expand, move away -> collapse, RE-hover -> expand again.
         cx, cy = cat_center_phys(win)
-        print(f"[probe] cat center physical = ({cx},{cy})")
-        g.move_ghosted(ghost, cx, cy, dur=0.8)
-        g.wait(1.2)
-        shots.shot("02_hover_expand")
+        away = g.to_physical(120, 120)  # far corner, off the window
+        print(f"[probe] cat center physical = ({cx},{cy}); away = {away}")
 
-        # add a todo: click into the panel's add input area (bottom of expanded window) and type
-        # expanded window grows toward center; we click near the cat then a bit toward panel-bottom.
-        # (best-effort; the screenshot is the real judge)
-        g.click(cx, cy)  # ensure focus/interactive
-        g.wait(0.3)
-        g.type_text("probe test task")
-        g.press("enter")
-        g.wait(0.6)
-        shots.shot("03_after_add")
+        g.move_ghosted(ghost, cx, cy, dur=0.8); g.wait(1.0)
+        shots.shot("02_hover_expand")          # panel should be OPEN
 
-        # move away to collapse, then drag the cat to bottom-left corner -> snap
-        g.move_ghosted(ghost, cx - 5, cy - 5, dur=0.3)
-        g.wait(0.6)
-        win2 = last_json("win:created") or win
-        sx, sy = cat_center_phys(win2)
-        tx, ty = g.to_physical(40, 760)
-        print(f"[probe] drag ({sx},{sy}) -> ({tx},{ty})")
-        g.drag_ghosted(ghost, sx, sy, tx, ty, dur=1.0)
-        g.wait(1.2)
-        shots.shot("04_after_snap_bottomleft")
+        g.move_ghosted(ghost, away[0], away[1], dur=0.6); g.wait(0.8)
+        shots.shot("03_after_away_collapse")    # panel should be GONE, just the cat, no sliver
+
+        g.move_ghosted(ghost, cx, cy, dur=0.6); g.wait(1.0)
+        shots.shot("04_rehover_expand")         # panel should OPEN AGAIN (the bug)
 
         # --- log truth ---
-        print("\n=== snap:compute (last) ===")
-        print("\n".join(g.grep_log(LOG, "snap:compute", last=1)))
-        print("\n=== window:expand / collapse ===")
-        print("\n".join(g.grep_log(LOG, "window:(expand|collapse)", last=4)))
-        print("\n=== reportedSize sanity (drag:move last 2) ===")
-        print("\n".join(g.grep_log(LOG, "drag:move", last=2)))
+        print("\n=== window:expand events ===")
+        print("\n".join(g.grep_log(LOG, "window:expand")))
+        print("\n=== window:collapse events ===")
+        print("\n".join(g.grep_log(LOG, "window:collapse")))
+        ne = len(g.grep_log(LOG, "window:expand")); nc = len(g.grep_log(LOG, "window:collapse"))
+        print(f"\n[probe] expands={ne} collapses={nc} (expect ~2 expands, ~1 collapse)")
         print(f"\n[probe] screenshots in: {OUT}")
         for p in shots.paths:
             print("  ", p)
