@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { avatarSets, type AvatarState } from '../avatar/spriteConfig'
+import { getContentCellBox, type CellBox } from '../avatar/spriteBounds'
 
 declare global {
   interface Window {
@@ -10,6 +11,7 @@ declare global {
       enterCat: () => void
       leaveCat: () => void
       sendCatRect: (rect: { x: number; y: number; w: number; h: number }) => void
+      sendCatContent: (rect: { x: number; y: number; w: number; h: number }) => void
       onAnchorChanged: (cb: (edge: string) => void) => () => void
       onAvatarChanged: (cb: (id: string) => void) => () => void
     }
@@ -28,19 +30,41 @@ export function SpriteAvatar() {
 
   const avatar = avatarSets[avatarId] ?? avatarSets.luizmelo
   const state = avatar.states[animState]
+  const { tileW, tileH, scale } = avatar
+  const flipX = anchorEdge !== 'left'
 
-  // Report the CAT's rect (relative to window viewport) for click-through hit polling.
+  // Visible-pixel bbox of the cat within a cell (union over frames), so snap can flush the
+  // real cat pixels to the edge regardless of the sprite's transparent padding.
+  const [cellBox, setCellBox] = useState<CellBox | null>(null)
+  useEffect(() => {
+    let alive = true
+    getContentCellBox(state.image, state.frames, tileW, tileH).then((b) => { if (alive) setCellBox(b) })
+    return () => { alive = false }
+  }, [state.image, state.frames, tileW, tileH])
+
+  // Report (a) the generous sprite box for click/drag hit-testing, and
+  //        (b) the tight visible-content rect for edge snapping.
   const reportRect = useCallback(() => {
     if (!spriteRef.current) return
     const r = spriteRef.current.getBoundingClientRect()
     window.api.sendCatRect({ x: r.x, y: r.y, w: r.width, h: r.height })
-  }, [])
+
+    if (cellBox) {
+      const wpx = (cellBox.r - cellBox.l) * scale
+      const hpx = (cellBox.b - cellBox.t) * scale
+      // flip mirrors the content horizontally within the render box
+      const leftInBox = flipX ? (tileW - cellBox.r) * scale : cellBox.l * scale
+      window.api.sendCatContent({ x: r.x + leftInBox, y: r.y + cellBox.t * scale, w: wpx, h: hpx })
+    } else {
+      window.api.sendCatContent({ x: r.x, y: r.y, w: r.width, h: r.height })
+    }
+  }, [cellBox, scale, tileW, flipX])
 
   useEffect(() => {
     reportRect()
     const iv = setInterval(reportRect, 400)
     return () => clearInterval(iv)
-  }, [reportRect, avatarId, animState])
+  }, [reportRect])
 
   useEffect(() => window.api.onAnchorChanged((e) =>
     setAnchorEdge(e as 'left' | 'right' | 'top' | 'bottom')
@@ -60,8 +84,6 @@ export function SpriteAvatar() {
     window.addEventListener('mouseup', onUp)
   }, [])
 
-  const flipX = anchorEdge !== 'left'
-  const { tileW, tileH, scale } = avatar
   const renderW = tileW * scale
   const renderH = tileH * scale
   const { frames, fps, cols, rows, image } = state

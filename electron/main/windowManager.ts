@@ -101,8 +101,9 @@ export function createWindow(): BrowserWindow {
     }, 16)
   })
 
-  // Track the cat sprite's rect within the window (DIP) so snap can align the CAT, not the window.
-  ipcMain.on('cat:rect', (_e, rect: { x: number; y: number; w: number; h: number }) => {
+  // Track the cat's VISIBLE-pixel rect within the window (DIP) so snap aligns the real cat
+  // pixels to the edge regardless of sprite padding. (clickThrough uses the generous cat:rect.)
+  ipcMain.on('cat:content', (_e, rect: { x: number; y: number; w: number; h: number }) => {
     if (rect && rect.w > 0 && rect.h > 0) latestCatRect = rect
   })
 

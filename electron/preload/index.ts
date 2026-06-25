@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('api', {
   leaveCat: () => ipcRenderer.send('mouse:leave-cat'),
   sendCatRect: (rect: { x: number; y: number; w: number; h: number }) =>
     ipcRenderer.send('cat:rect', rect),
+  sendCatContent: (rect: { x: number; y: number; w: number; h: number }) =>
+    ipcRenderer.send('cat:content', rect),
 
   onAnchorChanged: (cb: (edge: string) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, edge: string): void => { cb(edge) }

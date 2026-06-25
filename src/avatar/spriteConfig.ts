@@ -49,10 +49,10 @@ export const avatarSets: Record<string, AvatarSet> = {
     tileH: 50,
     scale: 3,
     states: {
-      idle:  { image: new URL('../../assets/sprites/luizmelo/Cat-1-Idle.png', import.meta.url).href,     cols: 10, rows: 1, frames: strip(10), fps: 8 },
-      walk:  { image: new URL('../../assets/sprites/luizmelo/Cat-1-Walk.png', import.meta.url).href,     cols: 8,  rows: 1, frames: strip(8),  fps: 8 },
-      sleep: { image: new URL('../../assets/sprites/luizmelo/Cat-1-Sleeping.png', import.meta.url).href, cols: 2,  rows: 1, frames: strip(2),  fps: 1 },
-      alert: { image: new URL('../../assets/sprites/luizmelo/Cat-1-Meow.png', import.meta.url).href,     cols: 4,  rows: 1, frames: strip(4),  fps: 4 },
+      idle:  { image: new URL('../../assets/sprites/luizmelo/siamese/Cat-1-Idle.png', import.meta.url).href,     cols: 10, rows: 1, frames: strip(10), fps: 8 },
+      walk:  { image: new URL('../../assets/sprites/luizmelo/siamese/Cat-1-Walk.png', import.meta.url).href,     cols: 8,  rows: 1, frames: strip(8),  fps: 8 },
+      sleep: { image: new URL('../../assets/sprites/luizmelo/siamese/Cat-1-Sleeping.png', import.meta.url).href, cols: 2,  rows: 1, frames: strip(2),  fps: 1 },
+      alert: { image: new URL('../../assets/sprites/luizmelo/siamese/Cat-1-Meow.png', import.meta.url).href,     cols: 4,  rows: 1, frames: strip(4),  fps: 4 },
     }
   }
 }

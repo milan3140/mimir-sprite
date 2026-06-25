@@ -15,3 +15,5 @@
 - **License**: CC0 (Creative Commons Zero)
 - **Format**: 50x50 tiles, one horizontal-strip PNG per animation state
 - **Usage**: Secondary avatar set for visual comparison; candidate for Siamese recolor.
+
+Siamese recolor: assets/sprites/luizmelo/siamese/* are CC0 derivatives of the LuizMelo Pet Cats Pack (gold->cream/khaki palette swap, blue eyes kept).
