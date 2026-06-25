@@ -1,4 +1,4 @@
-# Mimir-Sprite — Run Notes (Slice M3a)
+# Mimir-Sprite — Run Notes (Slice M3a-polish)
 
 ## How to run
 
@@ -11,14 +11,14 @@ npm run typecheck # tsc --noEmit
 
 ## What works
 
-- Transparent frameless always-on-top window (190x190 collapsed, 420x380 expanded)
+- Transparent frameless always-on-top window (190x190 collapsed)
 - **Two avatar sets** (oneko + LuizMelo Cat-1) via generalized `AvatarSet` config in `spriteConfig.ts`
 - Supports both grid sheets (oneko) and per-state strips (LuizMelo)
 - **Live avatar switch** from tray menu
 - CSS `step-end` animation, `image-rendering: pixelated`
 - Manual drag: main polls `screen.getCursorScreenPoint()` at 16ms — DPI-safe
 - Snap to nearest of 4 screen edges (animated ease-out), visible-pixel snapping via `cat:content`
-- Click-through + cursor-polling fallback (120ms)
+- Click-through + cursor-polling fallback (100ms)
 - Tray icon + `Ctrl+Alt+Space` global shortcut
 - `anchorEdge` flips sprite via `scaleX(-1)` (faces screen center)
 
@@ -28,16 +28,25 @@ npm run typecheck # tsc --noEmit
   - lowdb v7 is ESM-only; loaded via `await import('lowdb')` in CJS main process
 - **IPC channels**: `todo:list|add|update|remove|reorder|start|pause|complete`, `app:setMode`, `store:changed` broadcast
 - **Zustand mirror**: renderer store mirrors `todos[]` + `appState` from main via `store:changed` events
-- **Hover-expand panel**: hovering the cat opens TodoPanel beside it; leaving collapses after 250ms debounce
-  - `setBounds` resize keeps cat anchored at its screen edge (panel grows toward screen center per `anchorEdge`)
-  - Expanded: `setIgnoreMouseEvents(false)` — whole window interactive
-  - Collapsed: restores `setIgnoreMouseEvents(true, {forward:true})` click-through
-  - Drag auto-collapses before starting
+
+### M3a-polish: 4-edge expand geometry + panel UX
+
+- **4-edge expand/collapse**: panel grows toward screen center for all 4 edges (right/left/top/bottom)
+  - Saves exact `collapsedBounds` on expand, restores on collapse (no position drift)
+  - On-screen clamp ensures the expanded window is always fully visible within the display workArea
+  - Layout adapts per edge: flex-row/row-reverse/col/col-reverse so cat stays at the docked corner
+  - `window:expanded` event now sends `{expanded, edge}` — renderer applies both at once
+- **150ms collapse debounce** (was 250ms) — panel closes promptly after leaving
+- **CSS slide-in transition**: panel animates in from the cat side (~140ms ease-out) per edge direction
+- **Drag-anywhere reorder**: `@dnd-kit/sortable` listeners on the whole row; `onPointerDown stopPropagation` on buttons, title, and detail popover prevents drag from starting there. GripVertical remains as visual affordance.
+- **Inline title rename**: click title → autofocus input, select-all. Enter/blur commits via `todoUpdate`. Esc cancels. No drag while editing.
+- **Title truncation**: long titles truncate to one line with ellipsis in the list
+- **Detail popover**: click row (not buttons/title) toggles a detail popover below the row showing full title + editable notes (textarea, blur-saves). Seam left for attachments in later slice.
+- **Expand dimensions**: left/right = WIN_W+PANEL_W × PANEL_H (440×360); top/bottom = WIN_W × WIN_H+PANEL_H (190×550)
 - **TodoPanel** (dark, token-driven, Lucide icons):
   - Top bar: "Mimir" label, Coffee (rest toggle), EyeOff (hide)
   - Todo list sorted by `order`, filtered `status!='done'`
-  - Each row: GripVertical drag handle, title, Play/Pause/Check/Brain(stub)/Trash2 controls
-  - `@dnd-kit/sortable` drag-reorder persists `order` across restart
+  - Each row: GripVertical visual, title (click=edit, truncated), Play/Pause/Check/Brain(stub)/Trash2 controls
   - Bottom add-todo input (Plus / Enter)
 - **State machine** (per docs/02):
   - `start` → status=active, mode=working, pauses any other active todo
@@ -46,7 +55,6 @@ npm run typecheck # tsc --noEmit
   - `rest` toggle → pauses active todo, mode=resting ⇄ idle
   - Only one active todo at a time
 - **Completion log**: jsonl at `userData/mimir-sprite/state/completion_log.jsonl`
-  - Written on complete with todoId, title, timestamps, totalActiveMs, empty thinking/notebook arrays
 
 ## Windows quirks
 
@@ -64,7 +72,7 @@ Snap uses `screen.getDisplayNearestPoint(cursor).workArea` from main (DIP-correc
 
 ### Click-through `mouseleave` unreliable
 
-Cursor-polling fallback in `clickThrough.ts` (120ms). Not optional — Electron issue #30808.
+Cursor-polling fallback in `clickThrough.ts` (100ms). Not optional — Electron issue #30808.
 
 ### `thickFrame: false` / `roundedCorners: false`
 
@@ -77,9 +85,8 @@ Required to prevent Win11 resize borders and auto-rounded corners on frameless w
 ## Stubs / TODO (later slices)
 
 - Brain/thinking icon is a stub (no-op) — thinking is a later slice
-- No attachments/paste, item-detail modal, thinking sessions, or notebooks
+- No attachments/paste in detail popover (seam left), thinking sessions, or notebooks
 - Sprite states only show `idle` (walk/sleep/alert wired, need mode→animation mapping)
 - No PPT/fullscreen detection
 - Tray icon is a programmatic pixel art — replace with proper `.ico`
 - Avatar switch not persisted to store
-- Top/bottom anchor edge panel layout is horizontal (same as left/right) — works but could be vertical

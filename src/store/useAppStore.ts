@@ -1,13 +1,16 @@
 import { create } from 'zustand'
 import type { Todo, AppMode, StoreSnapshot } from '../shared/types'
 
+type Edge = 'left' | 'right' | 'top' | 'bottom'
+
 interface AppStore {
-  anchorEdge: 'left' | 'right' | 'top' | 'bottom'
-  setAnchorEdge: (edge: 'left' | 'right' | 'top' | 'bottom') => void
+  anchorEdge: Edge
+  setAnchorEdge: (edge: Edge) => void
   avatarId: string
   setAvatarId: (id: string) => void
   expanded: boolean
-  setExpanded: (v: boolean) => void
+  // ponytail: main sends {expanded, edge} — we set both at once
+  setExpandedState: (v: { expanded: boolean; edge: string }) => void
   // Store mirror from main
   todos: Todo[]
   appMode: AppMode
@@ -20,7 +23,7 @@ export const useAppStore = create<AppStore>((set) => ({
   avatarId: 'luizmelo',
   setAvatarId: (id) => set({ avatarId: id }),
   expanded: false,
-  setExpanded: (v) => set({ expanded: v }),
+  setExpandedState: (v) => set({ expanded: v.expanded, anchorEdge: v.edge as Edge }),
   todos: [],
   appMode: { mode: 'idle', expanded: false },
   applySnapshot: (snap) => set({ todos: snap.todos, appMode: snap.appState }),

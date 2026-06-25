@@ -35,8 +35,8 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('store:changed', h)
     return () => { ipcRenderer.removeListener('store:changed', h) }
   },
-  onExpandedChanged: (cb: (v: boolean) => void) => {
-    const h = (_e: Electron.IpcRendererEvent, v: boolean): void => { cb(v) }
+  onExpandedChanged: (cb: (v: { expanded: boolean; edge: string }) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, v: { expanded: boolean; edge: string }): void => { cb(v) }
     ipcRenderer.on('window:expanded', h)
     return () => { ipcRenderer.removeListener('window:expanded', h) }
   },

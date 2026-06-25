@@ -39,7 +39,7 @@ export function setupClickThrough(win: BrowserWindow): void {
         outsideSince = 0
       } else if (!outsideSince) {
         outsideSince = Date.now()
-      } else if (Date.now() - outsideSince > 250) {
+      } else if (Date.now() - outsideSince > 150) {
         collapseWindow(win)
         outsideSince = 0
         interactive = false // window is click-through again; keep our flag in sync

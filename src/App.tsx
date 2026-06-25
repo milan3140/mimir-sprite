@@ -3,36 +3,61 @@ import { SpriteAvatar } from './components/SpriteAvatar'
 import { TodoPanel } from './components/TodoPanel'
 import { useAppStore } from './store/useAppStore'
 
-const CAT_SIZE = 190 // must match WIN_W/WIN_H in windowManager
+const CAT_W = 190 // must match WIN_W in windowManager
+const CAT_H = 190 // must match WIN_H in windowManager
 
 export default function App() {
   const expanded = useAppStore(s => s.expanded)
-  const setExpanded = useAppStore(s => s.setExpanded)
+  const setExpandedState = useAppStore(s => s.setExpandedState)
   const anchorEdge = useAppStore(s => s.anchorEdge)
   const applySnapshot = useAppStore(s => s.applySnapshot)
 
   // Mirror store from main
   useEffect(() => window.api.onStoreChanged(applySnapshot), [applySnapshot])
   // Expand/collapse is decided by MAIN (cursor poll); the renderer only reflects it.
-  useEffect(() => window.api.onExpandedChanged(setExpanded), [setExpanded])
+  useEffect(() => window.api.onExpandedChanged(setExpandedState), [setExpandedState])
 
-  // Panel on the side opposite the screen edge the cat is snapped to
-  const isRight = anchorEdge === 'right'
+  if (!expanded) return (
+    <div className="w-screen h-screen overflow-hidden bg-transparent">
+      <SpriteAvatar />
+    </div>
+  )
+
+  // ponytail: layout per edge — cat stays at the docked corner, panel fills the rest
+  const isHoriz = anchorEdge === 'left' || anchorEdge === 'right'
+  const flexDir = ({
+    right: 'flex-row',           // [Panel | Cat] — cat on the right
+    left:  'flex-row-reverse',   // [Panel | Cat] reversed → cat on the left
+    top:   'flex-col-reverse',   // [Panel | Cat] reversed → cat on top
+    bottom:'flex-col',           // [Panel | Cat] — cat on bottom
+  } as const)[anchorEdge]
+
+  // Slide-in direction: panel slides FROM the cat side
+  const slideAnim = ({
+    right: 'panel-slide-right',
+    left:  'panel-slide-left',
+    top:   'panel-slide-top',
+    bottom:'panel-slide-bottom',
+  } as const)[anchorEdge]
 
   return (
     <div className="w-screen h-screen overflow-hidden bg-transparent">
-      {expanded ? (
-        <div className={`flex h-full ${isRight ? 'flex-row' : 'flex-row-reverse'}`}>
-          <div className="flex-1 min-w-0 p-1">
-            <TodoPanel />
-          </div>
-          <div style={{ width: CAT_SIZE, minWidth: CAT_SIZE }} className="flex items-center justify-center">
-            <SpriteAvatar />
-          </div>
+      <div className={`flex h-full ${flexDir}`}>
+        {/* Panel — flex-1 fills the space the cat doesn't occupy */}
+        <div className={`flex-1 min-w-0 min-h-0 p-1 ${slideAnim}`}>
+          <TodoPanel edge={anchorEdge} />
         </div>
-      ) : (
-        <SpriteAvatar />
-      )}
+        {/* CatBox — fixed to the exact collapsed size, flush to docked edge */}
+        <div
+          style={isHoriz
+            ? { width: CAT_W, minWidth: CAT_W, height: CAT_H }
+            : { width: CAT_W, height: CAT_H, minHeight: CAT_H }
+          }
+          className={isHoriz ? 'self-start' : 'self-start'}
+        >
+          <SpriteAvatar />
+        </div>
+      </div>
     </div>
   )
 }

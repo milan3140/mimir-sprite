@@ -1,4 +1,4 @@
-import { BrowserWindow, screen, ipcMain } from 'electron'
+import { BrowserWindow, screen, ipcMain, Rectangle } from 'electron'
 import { join } from 'path'
 import { dlog } from './debugLog'
 
@@ -7,11 +7,12 @@ export type AnchorEdge = 'left' | 'right' | 'top' | 'bottom'
 // ponytail: collapsed = cat only; expanded = cat + panel
 export const WIN_W = 190
 export const WIN_H = 190
-export const EXPANDED_W = 420
-export const EXPANDED_H = 380
+const PANEL_W = 250
+const PANEL_H = 360
 
 let currentlyExpanded = false
 let currentEdge: AnchorEdge = 'right'
+let collapsedBounds: Rectangle | null = null
 
 export function isExpanded(): boolean { return currentlyExpanded }
 
@@ -124,48 +125,44 @@ export function createWindow(): BrowserWindow {
   return win
 }
 
-// --- Expand/Collapse: cat stays at its screen edge, panel grows toward center ---
+// --- Expand/Collapse: cat stays EXACTLY where it was, panel grows toward center ---
 
 export function expandWindow(win: BrowserWindow): void {
   if (win.isDestroyed() || currentlyExpanded) return
-  const [wx, wy] = win.getPosition()
-  let nx = wx, ny = wy
-  const dw = EXPANDED_W - WIN_W
-  const dh = EXPANDED_H - WIN_H
+  collapsedBounds = win.getBounds()
+  const { x: wx, y: wy } = collapsedBounds
 
+  let bx: number, by: number, bw: number, bh: number
   switch (currentEdge) {
-    case 'right': nx = wx - dw; break
-    case 'left': break
-    case 'bottom': ny = wy - dh; break
-    case 'top': break
+    case 'right':
+      bx = wx - PANEL_W; by = wy; bw = WIN_W + PANEL_W; bh = PANEL_H; break
+    case 'left':
+      bx = wx; by = wy; bw = WIN_W + PANEL_W; bh = PANEL_H; break
+    case 'top':
+      bx = wx; by = wy; bw = WIN_W; bh = WIN_H + PANEL_H; break
+    case 'bottom':
+      bx = wx; by = wy - PANEL_H; bw = WIN_W; bh = WIN_H + PANEL_H; break
   }
 
+  // ponytail: on-screen clamp so the panel is ALWAYS fully visible
+  const wa = screen.getDisplayMatching(collapsedBounds).workArea
+  bx = clamp(bx, wa.x, wa.x + wa.width - bw)
+  by = clamp(by, wa.y, wa.y + wa.height - bh)
+
   currentlyExpanded = true
-  win.setBounds({ x: Math.round(nx), y: Math.round(ny), width: EXPANDED_W, height: EXPANDED_H })
-  win.setIgnoreMouseEvents(false) // whole window interactive while panel is open
-  win.webContents.send('window:expanded', true) // renderer reflects this (it doesn't decide it)
-  dlog('window:expand', { from: { x: wx, y: wy }, to: { x: nx, y: ny }, edge: currentEdge })
+  win.setBounds({ x: Math.round(bx), y: Math.round(by), width: bw, height: bh })
+  win.setIgnoreMouseEvents(false)
+  win.webContents.send('window:expanded', { expanded: true, edge: currentEdge })
+  dlog('window:expand', { from: collapsedBounds, to: { x: bx, y: by, w: bw, h: bh }, edge: currentEdge })
 }
 
 export function collapseWindow(win: BrowserWindow): void {
   if (win.isDestroyed() || !currentlyExpanded) return
-  const [wx, wy] = win.getPosition()
-  let nx = wx, ny = wy
-  const dw = EXPANDED_W - WIN_W
-  const dh = EXPANDED_H - WIN_H
-
-  switch (currentEdge) {
-    case 'right': nx = wx + dw; break
-    case 'left': break
-    case 'bottom': ny = wy + dh; break
-    case 'top': break
-  }
-
   currentlyExpanded = false
-  win.setBounds({ x: Math.round(nx), y: Math.round(ny), width: WIN_W, height: WIN_H })
-  win.setIgnoreMouseEvents(true, { forward: true }) // restore click-through
-  win.webContents.send('window:expanded', false)
-  dlog('window:collapse', { to: { x: nx, y: ny }, edge: currentEdge })
+  if (collapsedBounds) win.setBounds(collapsedBounds) // restore exact pre-expand position
+  win.setIgnoreMouseEvents(true, { forward: true })
+  win.webContents.send('window:expanded', { expanded: false, edge: currentEdge })
+  dlog('window:collapse', { to: collapsedBounds, edge: currentEdge })
 }
 
 // --- Snap ---
