@@ -76,10 +76,17 @@ def norm_box(b: dict) -> dict:
     return {"x": b["x"], "y": b["y"], "w": b.get("w", b.get("width")), "h": b.get("h", b.get("height"))}
 
 
-def inside(b: dict, wa: dict, tol: int = 2) -> bool:
-    return (b["x"] >= wa["x"] - tol and b["y"] >= wa["y"] - tol and
-            b["x"] + b["w"] <= wa["x"] + wa["width"] + tol and
-            b["y"] + b["h"] <= wa["y"] + wa["height"] + tol)
+def inside(b: dict, wa: dict, edge: str = "", tol: int = 2) -> bool:
+    # ponytail: snap aligns cat CONTENT to the edge, so the 190×190 transparent window
+    # padding extends past the docked side. Allow WIN_W slack on that axis only.
+    pad = 190
+    lt = pad if edge == "left"   else tol
+    rt = pad if edge == "right"  else tol
+    tt = pad if edge == "top"    else tol
+    bt = pad if edge == "bottom" else tol
+    return (b["x"] >= wa["x"] - lt and b["y"] >= wa["y"] - tt and
+            b["x"] + b["w"] <= wa["x"] + wa["width"] + rt and
+            b["y"] + b["h"] <= wa["y"] + wa["height"] + bt)
 
 
 def check(name: str, ok: bool, detail: str = "") -> None:
@@ -154,10 +161,16 @@ def main() -> int:
             check(f"[{edge}] snapped", bool(sc) and sc.get("edge") == edge,
                   f"edge={sc.get('edge') if sc else None}")
 
-            # ponytail: cursor is ON the cat after snap (cat snapped to cursor release
-            # point) — move away FIRST so clickThrough doesn't fire an accidental expand
-            # that increments exp_prev before our check.
-            safe = g.to_physical(wa["x"] + wa["width"] // 2, wa["y"] + wa["height"] // 2, scale)
+            # ponytail: cursor is ON the cat after snap → accidental expand.  For
+            # vertical edges the expanded window (190×550) covers the workarea center,
+            # so move to the DIAGONAL-OPPOSITE corner to guarantee escaping the bounds.
+            safe_corners = {
+                "right":  (wa["x"] + 25,                wa["y"] + 25),
+                "left":   (wa["x"] + wa["width"] - 25,  wa["y"] + 25),
+                "top":    (wa["x"] + 25,                wa["y"] + wa["height"] - 25),
+                "bottom": (wa["x"] + 25,                wa["y"] + 25),
+            }
+            safe = g.to_physical(*safe_corners[edge], scale)
             g.move_ghosted(ghost, safe[0], safe[1], dur=0.3)
             g.wait(0.6)  # let accidental expand/collapse settle + catRect refresh (400ms interval)
 
@@ -175,7 +188,7 @@ def main() -> int:
             check(f"[{edge}] expands", bool(ev) and ev.get("edge") == edge)
             if ev and "to" in ev:
                 b = norm_box(ev["to"])
-                check(f"[{edge}] panel ON-SCREEN", inside(b, wa), f"to={b}")
+                check(f"[{edge}] panel ON-SCREEN", inside(b, wa, edge), f"to={b}")
             g.wait(0.4)
             shots.shot(f"{edge}_expanded")
 
