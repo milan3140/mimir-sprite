@@ -57,6 +57,10 @@ async function save(): Promise<void> {
   await db.write()
 }
 
+export function getSnapshot(): StoreSnapshot {
+  return { todos: getTodos(), appState: getAppState() }
+}
+
 // --- Todo CRUD ---
 
 export function getTodos(): Todo[] {

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import {
   Coffee, EyeOff, ChevronRight, ChevronDown, Play, Pause, Check, Brain, Trash2, Plus, X
@@ -39,15 +39,14 @@ function EditableTitle({ todo, onDone }: { todo: Todo; onDone: () => void }) {
       onBlur={commit}
       className="flex-1 text-xs outline-none px-1 py-0 min-w-0 bg-transparent"
       style={{ color: 'var(--fg)', borderBottom: '1px solid var(--brand)' }}
-      // ponytail: data-no-drag prevents PointerSensor from starting a drag
       onPointerDown={e => e.stopPropagation()}
     />
   )
 }
 
-// --- Detail popover (full title + editable notes) ---
+// --- Inline detail (in-flow, pushes rows down, full panel width) ---
 
-function DetailPopover({ todo, onClose }: { todo: Todo; onClose: () => void }) {
+function InlineDetail({ todo, onClose }: { todo: Todo; onClose: () => void }) {
   const [notes, setNotes] = useState(todo.notes ?? '')
   const dirty = useRef(false)
 
@@ -60,16 +59,13 @@ function DetailPopover({ todo, onClose }: { todo: Todo; onClose: () => void }) {
 
   return (
     <div
-      className="absolute z-50 w-64 max-h-48 flex flex-col overflow-hidden"
+      className="w-full overflow-hidden box-border"
       style={{
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-sm)',
-        boxShadow: 'var(--shadow)',
-        // ponytail: position below the row
-        top: '100%', left: 0, marginTop: 2
+        marginTop: 2, marginBottom: 2
       }}
-      // don't let clicks in the popover bubble to the row's click-to-open-detail handler
       onClick={e => e.stopPropagation()}
       onPointerDown={e => e.stopPropagation()}
     >
@@ -79,7 +75,7 @@ function DetailPopover({ todo, onClose }: { todo: Todo; onClose: () => void }) {
           <X size={12} />
         </button>
       </div>
-      {/* Full title — preserve multiline (#2) */}
+      {/* Full title — preserve multiline */}
       <div className="px-2 py-1 text-xs break-words whitespace-pre-wrap" style={{ color: 'var(--fg)' }}>{todo.title}</div>
       {/* Editable notes */}
       <textarea
@@ -87,7 +83,7 @@ function DetailPopover({ todo, onClose }: { todo: Todo; onClose: () => void }) {
         onChange={e => { setNotes(e.target.value); dirty.current = true }}
         onBlur={save}
         placeholder="Notes…"
-        className="flex-1 text-xs outline-none px-2 py-1 resize-none min-h-[3rem]"
+        className="w-full text-xs outline-none px-2 py-1 resize-none min-h-[3rem] box-border"
         style={{ background: 'var(--bg-solid)', color: 'var(--fg)', border: 'none' }}
         onPointerDown={e => e.stopPropagation()}
       />
@@ -111,90 +107,110 @@ function TodoRow({ todo }: { todo: Todo }) {
   }
   const isActive = todo.status === 'active'
 
-  // ponytail: row click opens detail (unless editing or clicking a button)
-  const handleRowClick = (e: React.MouseEvent) => {
-    // if click target is a button/input/textarea or inside one, skip
-    const t = e.target as HTMLElement
-    if (t.closest('button') || t.closest('input') || t.closest('textarea')) return
-    if (editing) return
-    setDetailOpen(v => !v)
-  }
-
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="relative flex items-center gap-1 px-1 py-0.5 rounded-sm hover:bg-[var(--surface-hover)]"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onClick={handleRowClick}
-      // ponytail: drag-anywhere — listeners on the row, not the grip handle.
-      // PointerSensor with 4px activation distance so clicks still register.
-      // data-no-drag on buttons/inputs prevents drag from starting there.
-      {...attributes}
-      {...listeners}
-    >
-      {/* left brand bar for active item */}
-      <div className={`w-0.5 self-stretch rounded-full ${isActive ? 'bg-[var(--brand)]' : 'bg-transparent'}`} />
-
-      {/* #8: fold/expand indicator (not a drag handle — the whole row drags). Click toggles detail. */}
-      <button
-        onClick={(e) => { e.stopPropagation(); setDetailOpen(v => !v) }}
-        onPointerDown={e => e.stopPropagation()}
-        className="text-[var(--fg-muted)] hover:text-[var(--fg)] shrink-0"
-        aria-label={detailOpen ? 'Collapse' : 'Expand'}
-        data-no-drag
+    <div ref={setNodeRef} style={style} data-todo-id={todo.id}>
+      {/* Row */}
+      <div
+        className="flex items-center gap-1 px-1 py-0.5 rounded-sm hover:bg-[var(--surface-hover)]"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        {...attributes}
+        {...listeners}
       >
-        {detailOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-      </button>
+        {/* left brand bar for active item */}
+        <div className={`w-0.5 self-stretch rounded-full ${isActive ? 'bg-[var(--brand)]' : 'bg-transparent'}`} />
 
-      {/* Title: click to edit, or truncate */}
-      {editing ? (
-        <EditableTitle todo={todo} onDone={() => setEditing(false)} />
-      ) : (
-        // #1: rename only on DOUBLE-click; no pointerDown-stop so the title area still drags,
-        // and a single click bubbles to the row (toggles detail). Show only the first line.
-        <span
-          className="flex-1 text-xs text-[var(--fg)] truncate select-none"
-          onDoubleClick={(e) => { e.stopPropagation(); setEditing(true) }}
-          title="Double-click to rename"
+        {/* fold/expand chevron */}
+        <button
+          onClick={(e) => { e.stopPropagation(); setDetailOpen(v => !v) }}
+          onPointerDown={e => e.stopPropagation()}
+          className="text-[var(--fg-muted)] hover:text-[var(--fg)] shrink-0"
+          aria-label={detailOpen ? 'Collapse' : 'Expand'}
+          data-btn="chevron"
         >
-          {todo.title.split('\n')[0]}
-        </span>
-      )}
-
-      {/* Controls */}
-      <div className="flex items-center gap-0.5 shrink-0" data-no-drag>
-        {(todo.status === 'pending' || todo.status === 'paused') && (
-          <button onClick={() => window.api.todoStart(todo.id)} className="text-[var(--fg)] hover:text-[var(--success)]" aria-label="Start">
-            <Play size={14} />
-          </button>
-        )}
-        {isActive && (
-          <button onClick={() => window.api.todoPause(todo.id)} className="text-[var(--fg)] hover:text-[var(--warning)]" aria-label="Pause">
-            <Pause size={14} />
-          </button>
-        )}
-        {(isActive || todo.status === 'paused') && (
-          <button onClick={() => window.api.todoComplete(todo.id)} className="text-[var(--fg)] hover:text-[var(--success)]" aria-label="Complete">
-            <Check size={14} />
-          </button>
-        )}
-        {/* ponytail: stub — thinking is a later slice */}
-        <button className="text-[var(--fg-muted)] opacity-40 cursor-default" aria-label="Think (coming soon)">
-          <Brain size={14} />
+          {detailOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
-        {hovered && (
-          <button onClick={() => window.api.todoRemove(todo.id)} className="text-[var(--fg)] hover:text-[var(--danger)]" aria-label="Delete">
-            <Trash2 size={14} />
-          </button>
+
+        {/* Title */}
+        {editing ? (
+          <EditableTitle todo={todo} onDone={() => setEditing(false)} />
+        ) : (
+          <span
+            className="flex-1 text-xs text-[var(--fg)] truncate select-none"
+            onDoubleClick={(e) => { e.stopPropagation(); setEditing(true) }}
+            title="Double-click to rename"
+          >
+            {todo.title.split('\n')[0]}
+          </span>
         )}
+
+        {/* Controls */}
+        <div className="flex items-center gap-0.5 shrink-0" onPointerDown={e => e.stopPropagation()}>
+          {(todo.status === 'pending' || todo.status === 'paused') && (
+            <button onClick={() => window.api.todoStart(todo.id)} className="text-[var(--fg)] hover:text-[var(--success)]" aria-label="Start" data-btn="start">
+              <Play size={14} />
+            </button>
+          )}
+          {isActive && (
+            <button onClick={() => window.api.todoPause(todo.id)} className="text-[var(--fg)] hover:text-[var(--warning)]" aria-label="Pause" data-btn="pause">
+              <Pause size={14} />
+            </button>
+          )}
+          {(isActive || todo.status === 'paused') && (
+            <button onClick={() => window.api.todoComplete(todo.id)} className="text-[var(--fg)] hover:text-[var(--success)]" aria-label="Complete" data-btn="complete">
+              <Check size={14} />
+            </button>
+          )}
+          <button className="text-[var(--fg-muted)] opacity-40 cursor-default" aria-label="Think (coming soon)">
+            <Brain size={14} />
+          </button>
+          {hovered && (
+            <button onClick={() => window.api.todoRemove(todo.id)} className="text-[var(--fg)] hover:text-[var(--danger)]" aria-label="Delete" data-btn="delete">
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Detail popover */}
-      {detailOpen && <DetailPopover todo={todo} onClose={() => setDetailOpen(false)} />}
+      {/* ponytail: inline detail — in-flow, pushes rows down, full width */}
+      {detailOpen && <InlineDetail todo={todo} onClose={() => setDetailOpen(false)} />}
     </div>
   )
+}
+
+// --- Panel rect instrumentation (for self-test probes) ---
+
+function usePanelRects(panelRef: React.RefObject<HTMLDivElement | null>, expanded: boolean) {
+  useEffect(() => {
+    if (!expanded) return
+    const iv = setInterval(() => {
+      const panel = panelRef.current
+      if (!panel) return
+      const sx = window.screenX, sy = window.screenY
+      const toScreen = (r: DOMRect) => ({
+        x: Math.round(sx + r.x), y: Math.round(sy + r.y),
+        w: Math.round(r.width), h: Math.round(r.height)
+      })
+      // add-input
+      const addInput = panel.querySelector('textarea[placeholder]') as HTMLElement | null
+      const rects: Record<string, unknown> = {}
+      if (addInput) rects.addInput = toScreen(addInput.getBoundingClientRect())
+      // rows + their buttons
+      const rows: Record<string, unknown>[] = []
+      panel.querySelectorAll('[data-todo-id]').forEach(el => {
+        const id = (el as HTMLElement).dataset.todoId!
+        const entry: Record<string, unknown> = { id, rect: toScreen(el.getBoundingClientRect()) }
+        el.querySelectorAll('[data-btn]').forEach(btn => {
+          const name = (btn as HTMLElement).dataset.btn!
+          entry[name] = toScreen(btn.getBoundingClientRect())
+        })
+        rows.push(entry)
+      })
+      rects.rows = rows
+      window.api.sendPanelRects(rects)
+    }, 400)
+    return () => clearInterval(iv)
+  }, [panelRef, expanded])
 }
 
 // --- Panel ---
@@ -202,9 +218,12 @@ function TodoRow({ todo }: { todo: Todo }) {
 export function TodoPanel({ edge }: { edge: string }) {
   const todos = useAppStore((s) => s.todos)
   const appMode = useAppStore((s) => s.appMode)
+  const expanded = useAppStore((s) => s.expanded)
   const [newTitle, setNewTitle] = useState('')
+  const panelRef = useRef<HTMLDivElement>(null)
 
-  // ponytail: PointerSensor 4px activation, skip elements with data-no-drag
+  usePanelRects(panelRef, expanded)
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 4 },
@@ -234,13 +253,13 @@ export function TodoPanel({ edge }: { edge: string }) {
   const isResting = appMode.mode === 'resting'
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden"
+    <div ref={panelRef} className="flex flex-col h-full w-full overflow-hidden"
          style={{
            background: 'var(--bg)',
            backdropFilter: 'blur(12px)',
            border: '1px solid var(--border)',
            borderRadius: 'var(--radius)',
-           boxShadow: 'var(--shadow)'
+           // ponytail: NO box-shadow — transparent window clips it into ugly half-shadow (#6)
          }}>
       {/* Top bar */}
       <div className="flex items-center justify-between px-2 py-1.5"
@@ -259,7 +278,8 @@ export function TodoPanel({ edge }: { edge: string }) {
             onClick={() => window.api.windowHide()}
             style={{ color: 'var(--fg-muted)' }}
             className="hover:opacity-80"
-            aria-label="Hide"
+            aria-label="Hide (Ctrl+Alt+Space to bring back)"
+            title="Hide (Ctrl+Alt+Space to bring back)"
           >
             <EyeOff size={14} />
           </button>
@@ -267,7 +287,7 @@ export function TodoPanel({ edge }: { edge: string }) {
       </div>
 
       {/* Todo list */}
-      <div className="flex-1 overflow-y-auto px-1 py-1 min-h-0">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-1 min-h-0">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={visible.map(t => t.id)} strategy={verticalListSortingStrategy}>
             {visible.map(todo => <TodoRow key={todo.id} todo={todo} />)}
@@ -284,7 +304,6 @@ export function TodoPanel({ edge }: { edge: string }) {
         <textarea
           value={newTitle}
           onChange={e => setNewTitle(e.target.value)}
-          // #3: Enter sends, Shift+Enter inserts a newline (kept in the title; list shows line 1)
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addTodo() } }}
           placeholder="Add todo…  (Shift+Enter = newline)"
           rows={1}

@@ -7,7 +7,7 @@ export type AnchorEdge = 'left' | 'right' | 'top' | 'bottom'
 // ponytail: collapsed = cat only; expanded = cat + panel
 export const WIN_W = 190
 export const WIN_H = 190
-const PANEL_W = 250
+const PANEL_W = 200
 const PANEL_H = 360
 
 let currentlyExpanded = false

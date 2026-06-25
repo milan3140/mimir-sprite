@@ -11,7 +11,7 @@ export function setupTray(win: BrowserWindow): void {
   try {
     const icon = nativeImage.createFromBuffer(createTrayIcon(), { width: 16, height: 16 })
     tray = new Tray(icon)
-    tray.setToolTip('Mimir Sprite')
+    tray.setToolTip('Mimir Sprite — Ctrl+Alt+Space to show/hide')
     rebuildMenu(win)
     win.on('show', () => rebuildMenu(win))
     win.on('hide', () => rebuildMenu(win))

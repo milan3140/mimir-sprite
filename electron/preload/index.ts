@@ -51,4 +51,6 @@ contextBridge.exposeInMainWorld('api', {
   todoPause: (id: string) => ipcRenderer.invoke('todo:pause', id),
   todoComplete: (id: string) => ipcRenderer.invoke('todo:complete', id),
   appSetMode: (mode: string) => ipcRenderer.invoke('app:setMode', mode),
+  storeGet: () => ipcRenderer.invoke('store:get'),
+  sendPanelRects: (rects: unknown) => ipcRenderer.send('panel:rects', rects),
 })

@@ -30,6 +30,8 @@ declare global {
       todoPause: (id: string) => Promise<void>
       todoComplete: (id: string) => Promise<void>
       appSetMode: (mode: string) => Promise<void>
+      storeGet: () => Promise<StoreSnapshot>
+      sendPanelRects: (rects: unknown) => void
     }
   }
 }

@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { dlog } from './debugLog'
 import {
-  getTodos, getAppState, addTodo, updateTodo, removeTodo,
+  getTodos, getAppState, getSnapshot, addTodo, updateTodo, removeTodo,
   reorderTodos, startTodo, pauseTodo, completeTodo, setMode
 } from './store'
 import type { StoreSnapshot } from '../../src/shared/types'
@@ -17,8 +17,11 @@ export function setupIpc(win: BrowserWindow): void {
   ipcMain.handle('todo:complete', (_e, id: string) => completeTodo(id))
   ipcMain.handle('app:setMode', (_e, mode: 'idle' | 'resting') => setMode(mode))
   ipcMain.handle('app:getState', () => getAppState())
+  ipcMain.handle('store:get', () => getSnapshot())
 
   ipcMain.on('window:hide', () => win.hide())
+  // ponytail: panel element rects for self-test probes
+  ipcMain.on('panel:rects', (_e, rects: unknown) => dlog('panel:rects', rects))
 }
 
 /** Called by store on every mutation to push snapshot to renderer */

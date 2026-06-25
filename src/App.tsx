@@ -14,6 +14,8 @@ export default function App() {
 
   // Mirror store from main
   useEffect(() => window.api.onStoreChanged(applySnapshot), [applySnapshot])
+  // ponytail: pull initial snapshot on mount (the push broadcast fires before this effect registers)
+  useEffect(() => { window.api.storeGet().then(applySnapshot) }, [applySnapshot])
   // Expand/collapse is decided by MAIN (cursor poll); the renderer only reflects it.
   useEffect(() => window.api.onExpandedChanged(setExpandedState), [setExpandedState])
 
@@ -44,7 +46,8 @@ export default function App() {
     <div className="w-screen h-screen overflow-hidden bg-transparent">
       <div className={`flex h-full ${flexDir}`}>
         {/* Panel — flex-1 fills the space the cat doesn't occupy */}
-        <div className={`flex-1 min-w-0 min-h-0 p-1 ${slideAnim}`}>
+        {/* ponytail: no padding — panel border is the gap; sits flush to the cat */}
+        <div className={`flex-1 min-w-0 min-h-0 ${slideAnim}`}>
           <TodoPanel edge={anchorEdge} />
         </div>
         {/* CatBox — fixed to the exact collapsed size, flush to docked edge */}
