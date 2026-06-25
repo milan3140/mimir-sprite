@@ -19,6 +19,7 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str((PROJECT.parents[2] / "2_Toolkit/Harness/gui_visual_probe").resolve()))
 import gui_probe as g  # noqa: E402
+import pyautogui  # noqa: E402
 
 LOG = PROJECT / "mimir-debug.log"
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else PROJECT / "_probe_shots"
@@ -63,10 +64,10 @@ def workarea() -> dict:
 
 
 def cat_center_dip() -> tuple[float, float]:
-    sc = last_json("snap:compute")
-    if sc and "target" in sc and "catRect" in sc:
-        t, cr = sc["target"], sc["catRect"]
-        return (t["x"] + cr["x"] + cr["w"] / 2, t["y"] + cr["y"] + cr["h"] / 2)
+    # prefer the LIVE cat screen rect (reflects actual rendered position, even when docked)
+    cs = last_json("cat:screen")
+    if cs:
+        return (cs["x"] + cs["w"] / 2, cs["y"] + cs["h"] / 2)
     w = last_json("win:created") or {"x": 700, "y": 360}
     return (w["x"] + 95, w["y"] + 95)
 
@@ -84,6 +85,29 @@ def inside(b: dict, wa: dict, tol: int = 2) -> bool:
 def check(name: str, ok: bool, detail: str = "") -> None:
     results.append((name, ok, detail))
     print(("PASS " if ok else "FAIL "), name, ("- " + detail) if detail else "")
+
+
+def grab_cat(ghost, scale, attempts: int = 3) -> bool:
+    """Real-time adaptive grab: locate cat from LIVE cat:screen log, hover (wait for expand),
+    RE-READ the live position (it may shift on expand), mousedown, and confirm via drag:start.
+    Retry from a fresh live position if the grab didn't register."""
+    for _ in range(attempts):
+        cx, cy = cat_center_dip()
+        p = g.to_physical(cx, cy, scale)
+        exp_prev = count("window:expand")
+        g.move_ghosted(ghost, p[0], p[1], dur=0.4)
+        wait_new("window:expand", exp_prev, timeout=4)   # window now interactive
+        time.sleep(0.2)
+        cx, cy = cat_center_dip()                          # re-read AFTER expand (adaptive)
+        p = g.to_physical(cx, cy, scale)
+        g.move_ghosted(ghost, p[0], p[1], dur=0.2)
+        ds_prev = count("drag:start")
+        pyautogui.mouseDown()
+        if wait_new("drag:start", ds_prev, timeout=2):
+            return True                                   # grabbed
+        pyautogui.mouseUp()
+        time.sleep(0.3)
+    return False
 
 
 def main() -> int:
@@ -120,12 +144,14 @@ def main() -> int:
         }
 
         for edge in ["right", "top", "left", "bottom"]:
-            # drag the cat to this edge
-            ccx, ccy = cat_center_dip()
-            c = g.to_physical(ccx, ccy, scale)
-            snap_prev = count("snap:compute")
-            g.drag_ghosted(ghost, c[0], c[1], targets[edge][0], targets[edge][1], dur=0.9)
-            sc = wait_new("snap:compute", snap_prev, timeout=8)
+            grabbed = grab_cat(ghost, scale)
+            check(f"[{edge}] grabbed cat", grabbed)
+            if not grabbed:
+                continue
+            sd_prev = count("snap:done")
+            g.move_ghosted(ghost, targets[edge][0], targets[edge][1], dur=0.8)
+            pyautogui.mouseUp()
+            sc = wait_new("snap:done", sd_prev, timeout=6)
             check(f"[{edge}] snapped", bool(sc) and sc.get("edge") == edge,
                   f"edge={sc.get('edge') if sc else None}")
             g.wait(0.4)
@@ -153,9 +179,15 @@ def main() -> int:
 
         npass = sum(1 for _, ok, _ in results if ok)
         print(f"\n[SUITE] {npass}/{len(results)} passed")
-        print("screenshots:", OUT)
-        for p in shots.paths:
-            print("  ", p)
+        # emit a concise machine-readable report (the "signal" for the auto-iterate loop)
+        report = {
+            "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "pass": npass, "total": len(results),
+            "failures": [{"name": n, "detail": d} for n, ok, d in results if not ok],
+        }
+        (PROJECT / "state").mkdir(exist_ok=True)
+        (PROJECT / "state" / "probe_report.json").write_text(
+            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         return 0 if npass == len(results) else 2
     finally:
         if ghost:

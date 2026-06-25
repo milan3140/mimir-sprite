@@ -6,3 +6,5 @@ dist/
 mimir-debug.log
 _devout.txt
 _probe_shots/
+state/
+_probe_shots/
