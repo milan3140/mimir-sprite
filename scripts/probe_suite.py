@@ -88,8 +88,8 @@ def check(name: str, ok: bool, detail: str = "") -> None:
 
 
 def grab_cat(ghost, scale, attempts: int = 3) -> bool:
-    """Real-time adaptive grab: locate cat from LIVE cat:screen log, hover (wait for expand),
-    RE-READ the live position (it may shift on expand), mousedown, and confirm via drag:start.
+    """Locate cat from LIVE cat:screen log, hover (wait for expand), mousedown at same spot
+    (cat screen position is stable across expand by design), confirm via drag:start.
     Retry from a fresh live position if the grab didn't register."""
     for _ in range(attempts):
         cx, cy = cat_center_dip()
@@ -97,16 +97,15 @@ def grab_cat(ghost, scale, attempts: int = 3) -> bool:
         exp_prev = count("window:expand")
         g.move_ghosted(ghost, p[0], p[1], dur=0.4)
         wait_new("window:expand", exp_prev, timeout=4)   # window now interactive
-        time.sleep(0.2)
-        cx, cy = cat_center_dip()                          # re-read AFTER expand (adaptive)
-        p = g.to_physical(cx, cy, scale)
-        g.move_ghosted(ghost, p[0], p[1], dur=0.2)
+        time.sleep(0.3)                                   # let interactive mode settle
+        # ponytail: don't re-move cursor — cat stays at same screen pos during expand;
+        # re-moving risked exiting the window (150ms collapse grace) before mouseDown.
         ds_prev = count("drag:start")
         pyautogui.mouseDown()
-        if wait_new("drag:start", ds_prev, timeout=2):
+        if wait_new("drag:start", ds_prev, timeout=3):
             return True                                   # grabbed
         pyautogui.mouseUp()
-        time.sleep(0.3)
+        time.sleep(0.5)                                   # wait for any unexpected snap to finish
     return False
 
 

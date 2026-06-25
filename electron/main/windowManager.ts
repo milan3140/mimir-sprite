@@ -15,6 +15,7 @@ let currentEdge: AnchorEdge = 'right'
 let collapsedBounds: Rectangle | null = null
 let snapping = false                       // true while the ~320ms snap animation runs
 let dockedBounds: Rectangle | null = null  // the FINAL docked (edge) collapsed bounds
+let dragging = false                       // true while mouse-drag is active
 
 export function isExpanded(): boolean { return currentlyExpanded }
 export function isSnapping(): boolean { return snapping }
@@ -63,13 +64,14 @@ export function createWindow(): BrowserWindow {
   // (re-hover stuck, flicker-collapse, residual panel sliver). Main is the single authority.
 
   // --- Drag driven entirely from main via cursor polling (DPI-safe) ---
-  let dragging = false
   let dragOffset = { x: 0, y: 0 }
   let dragInterval: ReturnType<typeof setInterval> | null = null
   let pollCount = 0
 
   ipcMain.on('drag:start', (_e, catScreenRect?: { x: number; y: number; w: number; h: number }) => {
     if (win.isDestroyed()) return
+    // ponytail: clear stale docked position so collapse won't jump to a previous edge
+    dockedBounds = null
     // collapse before drag to avoid inflation
     if (currentlyExpanded) collapseWindow(win)
 
@@ -141,10 +143,9 @@ export function createWindow(): BrowserWindow {
 // --- Expand/Collapse: cat stays EXACTLY where it was, panel grows toward center ---
 
 export function expandWindow(win: BrowserWindow): void {
-  // Never expand mid-snap, and expand from the TRUE docked edge bounds — not getBounds(), which
-  // can be a mid-animation position (that was the "re-hover returns to the previous position,
-  // not docked at the edge" bug). dockedBounds is set when the snap animation finishes.
-  if (win.isDestroyed() || currentlyExpanded || snapping) return
+  // Never expand mid-snap or mid-drag; expand from the TRUE docked edge bounds — not getBounds(),
+  // which can be a mid-animation position. dockedBounds is set when the snap animation finishes.
+  if (win.isDestroyed() || currentlyExpanded || snapping || dragging) return
   collapsedBounds = dockedBounds ?? win.getBounds()
   const { x: wx, y: wy } = collapsedBounds
 
@@ -253,6 +254,12 @@ function snapToNearestEdge(win: BrowserWindow): void {
       clearInterval(snapInterval!); snapInterval = null
       snapping = false
       dockedBounds = { x: tx, y: ty, width: WIN_W, height: WIN_H } // canonical docked position
+      // ponytail: snap animation sets WIN_W×WIN_H = collapsed; force-reset if stale
+      if (currentlyExpanded) {
+        currentlyExpanded = false
+        win.setIgnoreMouseEvents(true, { forward: true })
+        win.webContents.send('window:expanded', { expanded: false, edge })
+      }
       const [ax, ay] = win.getPosition()
       dlog('snap:done', { target: { x: tx, y: ty }, actual: { x: ax, y: ay }, edge })
       if (!win.isDestroyed()) win.webContents.send('anchor:changed', edge)
