@@ -1,4 +1,4 @@
-# Mimir-Sprite — Run Notes (Slice 1b)
+# Mimir-Sprite — Run Notes (Slice 1c)
 
 ## How to run
 
@@ -12,8 +12,11 @@ npm run typecheck # tsc --noEmit
 ## What works
 
 - Transparent frameless always-on-top window (128x128, `WIN_W`/`WIN_H` constant in windowManager.ts)
-- **Oneko sprite** via `SpriteAvatar.tsx` + `spriteConfig.ts` — CSS `steps()` animation, `image-rendering: pixelated`, 96px render size (`AVATAR_PX`). Swap sprite by editing `spriteConfig.ts` + dropping a new sheet.
-- States mapped: idle, walk (2-frame), sleep (2-frame), alert (1-frame)
+- **Two avatar sets** (oneko + LuizMelo Cat-1) via generalized `AvatarSet` config in `spriteConfig.ts`
+- Supports both grid sheets (oneko: one image, col/row coords) and per-state strips (LuizMelo: one PNG per state, horizontal strip)
+- **Live avatar switch** from tray menu: "Avatar: oneko → luizmelo" cycles between sets, sends IPC `avatar:changed` to renderer
+- CSS `steps()` animation, `image-rendering: pixelated`; each set has its own `scale` (oneko 3x, LuizMelo 2x)
+- States mapped: idle, walk, sleep, alert
 - Manual drag: renderer signals start/end, **main polls `screen.getCursorScreenPoint()` at 16ms** — DPI-safe, no renderer screenX/Y
 - All `win.setPosition` calls: `Math.round()` + `Number.isFinite()` guard (fixes Slice 1 crash)
 - Snap animation: guarded against `win.isDestroyed()`, abortable (new drag cancels in-flight snap)
@@ -52,4 +55,5 @@ Required to prevent Win11 resize borders and auto-rounded corners on frameless w
 - No PPT/fullscreen detection (needs `get-windows`)
 - Tray icon is a programmatic 16x16 circle — replace with proper `.ico`
 - shadcn/ui configured but no components added yet
-- Swap hero sprite to Siamese cat pack when available (edit `spriteConfig.ts`)
+- Recolor LuizMelo to Siamese palette when hero is chosen
+- Avatar switch is in-memory only, not persisted

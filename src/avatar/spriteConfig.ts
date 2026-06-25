@@ -1,48 +1,60 @@
 /**
- * Sprite sheet config — swap sheet by editing this file, no code changes needed.
- *
- * oneko.gif: 32x32 tiles, 8 cols x 4 rows (256x128 total).
- * Tile coords from oneko.js spriteSets (col, row) where (0,0) = top-left tile.
+ * Sprite config — supports grid sheets (oneko) and per-state strips (LuizMelo).
+ * Swap/add sets here, no component code changes needed.
  */
 
-export interface SpriteState {
-  frames: [number, number][]  // [col, row] per frame
+export type AvatarState = 'idle' | 'walk' | 'sleep' | 'alert'
+
+export interface StateConfig {
+  image: string                // URL to sheet or strip image
+  cols: number                 // total columns in this image
+  rows: number                 // total rows in this image
+  frames: [number, number][]   // [col, row] per animation frame
   fps: number
 }
 
-export interface SpriteSheet {
-  src: string
+export interface AvatarSet {
+  id: string
+  label: string
   tileW: number
   tileH: number
-  cols: number
-  rows: number
-  states: Record<string, SpriteState>
+  scale: number
+  states: Record<AvatarState, StateConfig>
 }
 
-// ponytail: oneko spriteSets mapping — coords are (col, row) from top-left
-export const spriteSheet: SpriteSheet = {
-  src: new URL('../../assets/sprites/oneko.gif', import.meta.url).href,
-  tileW: 32,
-  tileH: 32,
-  cols: 8,
-  rows: 4,
-  states: {
-    idle: {
-      frames: [[3, 3]],  // still/alert facing south
-      fps: 1
-    },
-    walk: {
-      // running-right frames (2-frame cycle)
-      frames: [[4, 0], [4, 1]],
-      fps: 4
-    },
-    sleep: {
-      frames: [[2, 0], [2, 1]],
-      fps: 1
-    },
-    alert: {
-      frames: [[7, 3]],  // alert/surprised
-      fps: 1
+// ponytail: helper — horizontal strip frames [0,0],[1,0],...,[n-1,0]
+const strip = (n: number): [number, number][] =>
+  Array.from({ length: n }, (_, i): [number, number] => [i, 0])
+
+const onekoImg = new URL('../../assets/sprites/oneko.gif', import.meta.url).href
+
+export const avatarSets: Record<string, AvatarSet> = {
+  oneko: {
+    id: 'oneko',
+    label: 'Oneko',
+    tileW: 32,
+    tileH: 32,
+    scale: 3,
+    states: {
+      idle:  { image: onekoImg, cols: 8, rows: 4, frames: [[3, 3]],              fps: 1 },
+      walk:  { image: onekoImg, cols: 8, rows: 4, frames: [[4, 0], [4, 1]],      fps: 4 },
+      sleep: { image: onekoImg, cols: 8, rows: 4, frames: [[2, 0], [2, 1]],      fps: 1 },
+      alert: { image: onekoImg, cols: 8, rows: 4, frames: [[7, 3]],              fps: 1 },
+    }
+  },
+  luizmelo: {
+    id: 'luizmelo',
+    label: 'LuizMelo Cat',
+    tileW: 50,
+    tileH: 50,
+    scale: 2,
+    states: {
+      idle:  { image: new URL('../../assets/sprites/luizmelo/Cat-1-Idle.png', import.meta.url).href,     cols: 10, rows: 1, frames: strip(10), fps: 8 },
+      walk:  { image: new URL('../../assets/sprites/luizmelo/Cat-1-Walk.png', import.meta.url).href,     cols: 8,  rows: 1, frames: strip(8),  fps: 8 },
+      sleep: { image: new URL('../../assets/sprites/luizmelo/Cat-1-Sleeping.png', import.meta.url).href, cols: 2,  rows: 1, frames: strip(2),  fps: 1 },
+      alert: { image: new URL('../../assets/sprites/luizmelo/Cat-1-Meow.png', import.meta.url).href,     cols: 4,  rows: 1, frames: strip(4),  fps: 4 },
     }
   }
 }
+
+export const avatarIds = Object.keys(avatarSets)

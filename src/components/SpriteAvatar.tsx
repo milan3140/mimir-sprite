@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
-import { spriteSheet } from '../avatar/spriteConfig'
+import { avatarSets, type AvatarState } from '../avatar/spriteConfig'
 
 declare global {
   interface Window {
@@ -11,22 +11,23 @@ declare global {
       leaveCat: () => void
       sendCatRect: (rect: { x: number; y: number; w: number; h: number }) => void
       onAnchorChanged: (cb: (edge: string) => void) => () => void
+      onAvatarChanged: (cb: (id: string) => void) => () => void
     }
   }
 }
-
-// ponytail: single size constant — avatar render size in CSS px
-const AVATAR_PX = 96
 
 export function SpriteAvatar() {
   const ref = useRef<HTMLDivElement>(null)
   const anchorEdge = useAppStore((s) => s.anchorEdge)
   const setAnchorEdge = useAppStore((s) => s.setAnchorEdge)
-  const [animState] = useState<string>('idle')
+  const avatarId = useAppStore((s) => s.avatarId)
+  const setAvatarId = useAppStore((s) => s.setAvatarId)
+  const [animState] = useState<AvatarState>('idle')
 
-  const state = spriteSheet.states[animState] ?? spriteSheet.states.idle
+  const avatar = avatarSets[avatarId] ?? avatarSets.oneko
+  const state = avatar.states[animState]
 
-  // Report cat bounding rect to main for click-through polling
+  // Report rect for click-through polling
   const reportRect = useCallback(() => {
     if (!ref.current) return
     const r = ref.current.getBoundingClientRect()
@@ -39,36 +40,33 @@ export function SpriteAvatar() {
     return () => clearInterval(iv)
   }, [reportRect])
 
-  useEffect(() => {
-    return window.api.onAnchorChanged((edge) => {
-      setAnchorEdge(edge as 'left' | 'right' | 'top' | 'bottom')
-    })
-  }, [setAnchorEdge])
+  useEffect(() => window.api.onAnchorChanged((e) =>
+    setAnchorEdge(e as 'left' | 'right' | 'top' | 'bottom')
+  ), [setAnchorEdge])
 
-  // Drag: just signal start/end, main polls cursor itself
+  useEffect(() => window.api.onAvatarChanged(setAvatarId), [setAvatarId])
+
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return
     window.api.dragStart()
-
-    const onUp = () => {
-      window.api.dragEnd()
-      window.removeEventListener('mouseup', onUp)
-    }
+    const onUp = () => { window.api.dragEnd(); window.removeEventListener('mouseup', onUp) }
     window.addEventListener('mouseup', onUp)
   }, [])
 
-  const flipX = anchorEdge === 'left' ? false : true
-  const { tileW, tileH } = spriteSheet
-  const scale = AVATAR_PX / tileW
-  const frameCount = state.frames.length
+  const flipX = anchorEdge !== 'left'
+  const { tileW, tileH, scale } = avatar
+  const renderW = tileW * scale
+  const renderH = tileH * scale
+  const { frames, fps, cols, rows, image } = state
+  const n = frames.length
 
-  // For multi-frame: CSS steps() animation cycling background-position
-  // For single-frame: static background-position
-  const sheetWidthPx = tileW * spriteSheet.cols
-  const sheetHeightPx = tileH * spriteSheet.rows
+  // ponytail: CSS steps() on a single strip/grid — works for both sheet shapes
+  const bgW = cols * tileW * scale
+  const bgH = rows * tileH * scale
+  const f0 = frames[0]
 
-  // Build a strip of positions for animation (uses first frame's row for simple case)
-  const firstFrame = state.frames[0]
+  // Unique key per state+avatar to force re-mount when animation changes
+  const key = `${avatar.id}-${animState}`
 
   return (
     <div
@@ -79,43 +77,35 @@ export function SpriteAvatar() {
       onMouseLeave={() => window.api.leaveCat()}
     >
       <div
-        className="transition-transform duration-slow ease-app"
+        key={key}
         style={{
-          width: AVATAR_PX,
-          height: AVATAR_PX,
+          width: renderW,
+          height: renderH,
           imageRendering: 'pixelated',
-          backgroundImage: `url("${spriteSheet.src}")`,
-          backgroundSize: `${sheetWidthPx * scale}px ${sheetHeightPx * scale}px`,
-          backgroundPosition: frameCount === 1
-            ? `-${firstFrame[0] * tileW * scale}px -${firstFrame[1] * tileH * scale}px`
-            : undefined,
+          backgroundImage: `url("${image}")`,
+          backgroundSize: `${bgW}px ${bgH}px`,
           backgroundRepeat: 'no-repeat',
           transform: flipX ? 'scaleX(-1)' : undefined,
-          // Multi-frame animation via CSS steps
-          ...(frameCount > 1 ? {
-            animation: `sprite-${animState} ${frameCount / state.fps}s steps(${frameCount}) infinite`
-          } : {})
+          ...(n === 1
+            ? { backgroundPosition: `-${f0[0] * tileW * scale}px -${f0[1] * tileH * scale}px` }
+            : { animation: `${key} ${n / fps}s steps(${n}) infinite` }
+          )
         }}
       />
-      {/* Inject keyframes for multi-frame states */}
-      {frameCount > 1 && (
-        <style>{buildKeyframes(animState, state.frames, tileW, tileH, scale)}</style>
-      )}
+      {n > 1 && <style>{buildKeyframes(key, frames, tileW, tileH, scale)}</style>}
     </div>
   )
 }
 
 function buildKeyframes(
-  name: string,
-  frames: [number, number][],
+  name: string, frames: [number, number][],
   tileW: number, tileH: number, scale: number
 ): string {
-  // Animate through each frame's background-position
-  const steps = frames.map((f, i) => {
+  const kf = frames.map((f, i) => {
     const pct = (i / frames.length * 100).toFixed(2)
-    return `${pct}% { background-position: -${f[0] * tileW * scale}px -${f[1] * tileH * scale}px; }`
+    return `${pct}%{background-position:-${f[0] * tileW * scale}px -${f[1] * tileH * scale}px}`
   })
-  // Final 100% wraps to first
-  steps.push(`100% { background-position: -${frames[0][0] * tileW * scale}px -${frames[0][1] * tileH * scale}px; }`)
-  return `@keyframes sprite-${name} { ${steps.join(' ')} }`
+  const f0 = frames[0]
+  kf.push(`100%{background-position:-${f0[0] * tileW * scale}px -${f0[1] * tileH * scale}px}`)
+  return `@keyframes ${name}{${kf.join('')}}`
 }
