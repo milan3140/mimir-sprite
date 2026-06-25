@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --hue: 265;
+
+  /* Surface: dark glass */
+  --bg:            hsl(var(--hue) 18% 8%  / 0.72);
+  --bg-solid:      hsl(var(--hue) 18% 8%);
+  --surface:       hsl(var(--hue) 16% 13% / 0.9);
+  --surface-hover: hsl(var(--hue) 16% 18%);
+  --border:        hsl(var(--hue) 14% 26% / 0.6);
+
+  /* Text */
+  --fg:            hsl(var(--hue) 12% 92%);
+  --fg-muted:      hsl(var(--hue) 10% 62%);
+  --fg-faint:      hsl(var(--hue) 10% 42%);
+
+  /* Brand / interactive */
+  --brand:         hsl(var(--hue) 70% 62%);
+  --brand-hover:   hsl(var(--hue) 70% 70%);
+  --ring:          hsl(var(--hue) 70% 62% / 0.5);
+
+  /* Semantic */
+  --success:       hsl(150 55% 55%);
+  --warning:       hsl(40  85% 60%);
+  --danger:        hsl(360 70% 62%);
+  --thinking:      hsl(var(--hue) 80% 68%);
+
+  /* Shape */
+  --radius:        10px;
+  --radius-sm:     7px;
+  --gap:           6px;
+  --pad:           10px;
+
+  /* Motion */
+  --ease:          cubic-bezier(.2,.8,.2,1);
+  --dur-fast:      120ms;
+  --dur:           200ms;
+  --dur-slow:      320ms;
+
+  /* Shadow */
+  --shadow:        0 8px 28px hsl(var(--hue) 40% 3% / 0.55);
+  --glow-think:    0 0 0 1px var(--thinking), 0 0 14px hsl(var(--hue) 80% 60% / 0.35);
+
+  /* Siamese cat palette (independent of --hue) */
+  --cat-cream:     hsl(36 38% 88%);
+  --cat-cream-sh:  hsl(34 30% 78%);
+  --cat-point:     hsl(28 25% 42%);
+  --cat-point-sh:  hsl(26 28% 30%);
+  --cat-eye:       hsl(205 45% 62%);
+  --cat-nose:      hsl(8 35% 70%);
+  --cat-outline:   hsl(28 25% 22%);
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* ---- Siamese furball (pure CSS placeholder) ---- */
+
+.cat-body {
+  width: 140px;
+  height: 110px;
+  background: var(--cat-cream);
+  border-radius: 50% 50% 48% 52% / 55% 55% 45% 45%;
+  box-shadow:
+    inset -12px -8px 20px var(--cat-cream-sh),
+    0 2px 6px hsl(28 25% 22% / 0.25);
+  position: relative;
+  animation: breathe 3.5s var(--ease) infinite;
+}
+
+.cat-ear {
+  position: absolute;
+  width: 28px;
+  height: 32px;
+  background: var(--cat-point);
+  top: -18px;
+  clip-path: polygon(50% 0%, 5% 100%, 95% 100%);
+}
+.cat-ear::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 18px;
+  background: var(--cat-nose);
+  top: 10px;
+  left: 6px;
+  clip-path: polygon(50% 0%, 5% 100%, 95% 100%);
+  opacity: 0.6;
+}
+.cat-ear-left  { left: 18px;  transform: rotate(-10deg); }
+.cat-ear-right { right: 18px; transform: rotate(10deg); }
+
+.cat-face {
+  position: absolute;
+  width: 60px;
+  height: 38px;
+  background: var(--cat-point);
+  border-radius: 50% 50% 45% 45% / 40% 40% 60% 60%;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0.75;
+}
+
+.cat-eye {
+  position: absolute;
+  width: 14px;
+  height: 16px;
+  background: var(--cat-eye);
+  border-radius: 50%;
+  top: 32px;
+  box-shadow: inset 2px 1px 3px hsl(205 45% 42%), 0 0 3px hsl(205 45% 62% / 0.4);
+}
+.cat-eye::after {
+  content: '';
+  position: absolute;
+  width: 5px;
+  height: 10px;
+  background: hsl(28 25% 12%);
+  border-radius: 50%;
+  top: 3px;
+  left: 5px;
+}
+.cat-eye-left  { left: 42px; }
+.cat-eye-right { right: 42px; }
+
+.cat-nose {
+  position: absolute;
+  width: 8px;
+  height: 5px;
+  background: var(--cat-nose);
+  border-radius: 50% 50% 40% 40%;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.cat-tail {
+  position: absolute;
+  width: 50px;
+  height: 14px;
+  background: var(--cat-point);
+  border-radius: 8px 20px 20px 8px;
+  bottom: 8px;
+  right: -20px;
+  transform: rotate(-8deg);
+  box-shadow: inset -4px -2px 6px var(--cat-point-sh);
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.03, 1.05); }
+}
