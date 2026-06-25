@@ -1,9 +1,10 @@
 import { BrowserWindow, screen, ipcMain } from 'electron'
 import { join } from 'path'
+import { dlog } from './debugLog'
 
 export type AnchorEdge = 'left' | 'right' | 'top' | 'bottom'
 
-// ponytail: single size constant, tune here
+// single size constant, tune here
 export const WIN_W = 128
 export const WIN_H = 128
 
@@ -40,29 +41,62 @@ export function createWindow(): BrowserWindow {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
+  win.webContents.once('did-finish-load', () => {
+    const [w, h] = win.getSize()
+    const [x, y] = win.getPosition()
+    // H3: is the actual window size what we asked for?
+    dlog('win:created', { askedW: WIN_W, askedH: WIN_H, gotW: w, gotH: h, x, y })
+  })
+
   // --- Drag driven entirely from main via cursor polling (DPI-safe) ---
   let dragging = false
   let dragOffset = { x: 0, y: 0 }
   let dragInterval: ReturnType<typeof setInterval> | null = null
+  let pollCount = 0
 
-  ipcMain.on('drag:start', () => {
+  ipcMain.on('drag:start', (_e, catScreenRect?: { x: number; y: number; w: number; h: number }) => {
     if (win.isDestroyed()) return
     const cursor = screen.getCursorScreenPoint()
     const [wx, wy] = win.getPosition()
+    const [ww, wh] = win.getSize()
     dragOffset = { x: cursor.x - wx, y: cursor.y - wy }
     dragging = true
+    pollCount = 0
 
-    // ponytail: poll cursor in main — renderer screenX/Y lies under DPI scaling
+    const disp = screen.getDisplayNearestPoint(cursor)
+    // H6: was the cursor actually over the cat sprite when drag started?
+    const overCat = catScreenRect
+      ? cursor.x >= catScreenRect.x && cursor.x <= catScreenRect.x + catScreenRect.w &&
+        cursor.y >= catScreenRect.y && cursor.y <= catScreenRect.y + catScreenRect.h
+      : 'unknown'
+    dlog('drag:start', {
+      cursor, winPos: { x: wx, y: wy }, winSize: { w: ww, h: wh },
+      offset: dragOffset, scaleFactor: disp.scaleFactor, overCat, catScreenRect
+    })
+
     dragInterval = setInterval(() => {
       if (!dragging || win.isDestroyed()) {
         if (dragInterval) clearInterval(dragInterval)
         return
       }
       const c = screen.getCursorScreenPoint()
-      const nx = Math.round(c.x - dragOffset.x)
-      const ny = Math.round(c.y - dragOffset.y)
-      if (!Number.isFinite(nx) || !Number.isFinite(ny)) return
+      const rawX = c.x - dragOffset.x
+      const rawY = c.y - dragOffset.y
+      const { x: nx, y: ny, clamped } = clampToDisplay(c, rawX, rawY, WIN_W, WIN_H)
+      if (!Number.isFinite(nx) || !Number.isFinite(ny)) {
+        dlog('drag:move:NONFINITE', { rawX, rawY }) // H5
+        return
+      }
       win.setPosition(nx, ny)
+      pollCount++
+      // throttle: log ~every 200ms, plus any time clamp kicked in (H5)
+      if (clamped || pollCount % 12 === 0) {
+        const [ax, ay] = win.getPosition() // actual after set — round-trip reveals DPI drift (H1)
+        dlog('drag:move', {
+          cursor: c, rawX, rawY, set: { x: nx, y: ny }, actual: { x: ax, y: ay },
+          driftX: ax - nx, driftY: ay - ny, clamped
+        })
+      }
     }, 16)
   })
 
@@ -70,6 +104,8 @@ export function createWindow(): BrowserWindow {
     if (!dragging) return
     dragging = false
     if (dragInterval) { clearInterval(dragInterval); dragInterval = null }
+    const [wx, wy] = win.getPosition()
+    dlog('drag:end', { winPos: { x: wx, y: wy } })
     if (!win.isDestroyed()) snapToNearestEdge(win)
   })
 
@@ -79,13 +115,16 @@ export function createWindow(): BrowserWindow {
 let snapInterval: ReturnType<typeof setInterval> | null = null
 
 function snapToNearestEdge(win: BrowserWindow): void {
-  // Abort any in-flight snap
   if (snapInterval) { clearInterval(snapInterval); snapInterval = null }
 
   const [wx, wy] = win.getPosition()
   const [ww, wh] = win.getSize()
   const cursor = screen.getCursorScreenPoint()
-  const wa = screen.getDisplayNearestPoint(cursor).workArea
+
+  // H4: compare the display under the cursor vs the display under the window center
+  const dispByCursor = screen.getDisplayNearestPoint(cursor)
+  const dispByWindow = screen.getDisplayMatching({ x: wx, y: wy, width: ww, height: wh })
+  const wa = dispByWindow.workArea
 
   const cx = wx + ww / 2
   const cy = wy + wh / 2
@@ -101,13 +140,27 @@ function snapToNearestEdge(win: BrowserWindow): void {
     distances[a] <= distances[b] ? a : b
   )
 
-  let tx = wx, ty = wy
+  // raw target (pre-clamp) — H5: if this is ever absurd we'll see it
+  let rawTx = wx, rawTy = wy
   switch (edge) {
-    case 'left':   tx = wa.x;                       ty = clamp(wy, wa.y, wa.y + wa.height - wh); break
-    case 'right':  tx = wa.x + wa.width - ww;       ty = clamp(wy, wa.y, wa.y + wa.height - wh); break
-    case 'top':    ty = wa.y;                        tx = clamp(wx, wa.x, wa.x + wa.width - ww);  break
-    case 'bottom': ty = wa.y + wa.height - wh;       tx = clamp(wx, wa.x, wa.x + wa.width - ww);  break
+    case 'left':   rawTx = wa.x;                  rawTy = wy; break
+    case 'right':  rawTx = wa.x + wa.width - ww;  rawTy = wy; break
+    case 'top':    rawTy = wa.y;                  rawTx = wx; break
+    case 'bottom': rawTy = wa.y + wa.height - wh; rawTx = wx; break
   }
+  // clamp both axes into workArea so it can never end outside / accumulate
+  const tx = Math.round(clamp(rawTx, wa.x, wa.x + wa.width - ww))
+  const ty = Math.round(clamp(rawTy, wa.y, wa.y + wa.height - wh))
+
+  dlog('snap:compute', {
+    winPos: { x: wx, y: wy }, winSize: { w: ww, h: wh },
+    cursorDispId: dispByCursor.id, windowDispId: dispByWindow.id, // H4
+    sameDisplay: dispByCursor.id === dispByWindow.id,
+    scaleFactor: dispByWindow.scaleFactor,                         // H1
+    workArea: wa,                                                  // H2
+    distances, edge, raw: { x: rawTx, y: rawTy }, target: { x: tx, y: ty },
+    clampedTarget: rawTx !== tx || rawTy !== ty                    // H5
+  })
 
   const frames = 20
   const startX = wx, startY = wy
@@ -122,12 +175,26 @@ function snapToNearestEdge(win: BrowserWindow): void {
     if (Number.isFinite(x) && Number.isFinite(y)) win.setPosition(x, y)
     if (frame >= frames) {
       clearInterval(snapInterval!); snapInterval = null
+      const [ax, ay] = win.getPosition()
+      // H1: did we actually land where we aimed?
+      dlog('snap:done', { target: { x: tx, y: ty }, actual: { x: ax, y: ay }, edge })
       if (!win.isDestroyed()) win.webContents.send('anchor:changed', edge)
     }
   }, 16)
 }
 
+/** Clamp (x,y) so a WxH window stays within the display under `point`. Reports if it changed. */
+function clampToDisplay(
+  point: { x: number; y: number }, x: number, y: number, w: number, h: number
+): { x: number; y: number; clamped: boolean } {
+  const b = screen.getDisplayNearestPoint(point).bounds
+  const cx = Math.round(clamp(x, b.x, b.x + b.width - w))
+  const cy = Math.round(clamp(y, b.y, b.y + b.height - h))
+  return { x: cx, y: cy, clamped: cx !== Math.round(x) || cy !== Math.round(y) }
+}
+
 function clamp(v: number, min: number, max: number): number {
+  if (max < min) return min // degenerate (window bigger than area) — avoid NaN/inversion
   return Math.max(min, Math.min(max, v))
 }
 

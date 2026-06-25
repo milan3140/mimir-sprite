@@ -5,7 +5,7 @@ import { avatarSets, type AvatarState } from '../avatar/spriteConfig'
 declare global {
   interface Window {
     api: {
-      dragStart: () => void
+      dragStart: (catScreenRect: { x: number; y: number; w: number; h: number }) => void
       dragEnd: () => void
       enterCat: () => void
       leaveCat: () => void
@@ -17,28 +17,30 @@ declare global {
 }
 
 export function SpriteAvatar() {
-  const ref = useRef<HTMLDivElement>(null)
+  // ref is on the INNER sprite (the actual cat), so drag + hit-test = the cat only,
+  // not the whole transparent window. Fixes "drags even when not on the cat".
+  const spriteRef = useRef<HTMLDivElement>(null)
   const anchorEdge = useAppStore((s) => s.anchorEdge)
   const setAnchorEdge = useAppStore((s) => s.setAnchorEdge)
   const avatarId = useAppStore((s) => s.avatarId)
   const setAvatarId = useAppStore((s) => s.setAvatarId)
   const [animState] = useState<AvatarState>('idle')
 
-  const avatar = avatarSets[avatarId] ?? avatarSets.oneko
+  const avatar = avatarSets[avatarId] ?? avatarSets.luizmelo
   const state = avatar.states[animState]
 
-  // Report rect for click-through polling
+  // Report the CAT's rect (relative to window viewport) for click-through hit polling.
   const reportRect = useCallback(() => {
-    if (!ref.current) return
-    const r = ref.current.getBoundingClientRect()
+    if (!spriteRef.current) return
+    const r = spriteRef.current.getBoundingClientRect()
     window.api.sendCatRect({ x: r.x, y: r.y, w: r.width, h: r.height })
   }, [])
 
   useEffect(() => {
     reportRect()
-    const iv = setInterval(reportRect, 500)
+    const iv = setInterval(reportRect, 400)
     return () => clearInterval(iv)
-  }, [reportRect])
+  }, [reportRect, avatarId, animState])
 
   useEffect(() => window.api.onAnchorChanged((e) =>
     setAnchorEdge(e as 'left' | 'right' | 'top' | 'bottom')
@@ -48,7 +50,12 @@ export function SpriteAvatar() {
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return
-    window.api.dragStart()
+    // pass the cat's SCREEN rect so main can verify the drag really started on the cat (H6)
+    const r = spriteRef.current?.getBoundingClientRect()
+    const catScreenRect = r
+      ? { x: Math.round(window.screenX + r.x), y: Math.round(window.screenY + r.y), w: Math.round(r.width), h: Math.round(r.height) }
+      : { x: 0, y: 0, w: 0, h: 0 }
+    window.api.dragStart(catScreenRect)
     const onUp = () => { window.api.dragEnd(); window.removeEventListener('mouseup', onUp) }
     window.addEventListener('mouseup', onUp)
   }, [])
@@ -60,38 +67,39 @@ export function SpriteAvatar() {
   const { frames, fps, cols, rows, image } = state
   const n = frames.length
 
-  // ponytail: CSS steps() on a single strip/grid — works for both sheet shapes
   const bgW = cols * tileW * scale
   const bgH = rows * tileH * scale
   const f0 = frames[0]
-
-  // Unique key per state+avatar to force re-mount when animation changes
   const key = `${avatar.id}-${animState}`
 
   return (
-    <div
-      ref={ref}
-      className="flex items-center justify-center w-full h-full cursor-grab active:cursor-grabbing select-none"
-      onMouseDown={onMouseDown}
-      onMouseEnter={() => window.api.enterCat()}
-      onMouseLeave={() => window.api.leaveCat()}
-    >
+    // outer container: pointer-events none so ONLY the cat is interactive/draggable
+    <div className="flex items-center justify-center w-full h-full select-none" style={{ pointerEvents: 'none' }}>
       <div
-        key={key}
-        style={{
-          width: renderW,
-          height: renderH,
-          imageRendering: 'pixelated',
-          backgroundImage: `url("${image}")`,
-          backgroundSize: `${bgW}px ${bgH}px`,
-          backgroundRepeat: 'no-repeat',
-          transform: flipX ? 'scaleX(-1)' : undefined,
-          ...(n === 1
-            ? { backgroundPosition: `-${f0[0] * tileW * scale}px -${f0[1] * tileH * scale}px` }
-            : { animation: `${key} ${n / fps}s steps(${n}) infinite` }
-          )
-        }}
-      />
+        ref={spriteRef}
+        className="cursor-grab active:cursor-grabbing"
+        style={{ pointerEvents: 'auto' }}
+        onMouseDown={onMouseDown}
+        onMouseEnter={() => window.api.enterCat()}
+        onMouseLeave={() => window.api.leaveCat()}
+      >
+        <div
+          key={key}
+          style={{
+            width: renderW,
+            height: renderH,
+            imageRendering: 'pixelated',
+            backgroundImage: `url("${image}")`,
+            backgroundSize: `${bgW}px ${bgH}px`,
+            backgroundRepeat: 'no-repeat',
+            transform: flipX ? 'scaleX(-1)' : undefined,
+            ...(n === 1
+              ? { backgroundPosition: `-${f0[0] * tileW * scale}px -${f0[1] * tileH * scale}px` }
+              : { animation: `${key} ${n / fps}s steps(${n}) infinite` }
+            )
+          }}
+        />
+      </div>
       {n > 1 && <style>{buildKeyframes(key, frames, tileW, tileH, scale)}</style>}
     </div>
   )

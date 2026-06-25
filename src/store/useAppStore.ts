@@ -10,6 +10,6 @@ interface AppState {
 export const useAppStore = create<AppState>((set) => ({
   anchorEdge: 'right',
   setAnchorEdge: (edge) => set({ anchorEdge: edge }),
-  avatarId: 'oneko',
+  avatarId: 'luizmelo',
   setAvatarId: (id) => set({ avatarId: id })
 }))

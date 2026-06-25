@@ -1,7 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('api', {
-  dragStart: () => ipcRenderer.send('drag:start'),
+  dragStart: (catScreenRect: { x: number; y: number; w: number; h: number }) =>
+    ipcRenderer.send('drag:start', catScreenRect),
   dragEnd: () => ipcRenderer.send('drag:end'),
   enterCat: () => ipcRenderer.send('mouse:enter-cat'),
   leaveCat: () => ipcRenderer.send('mouse:leave-cat'),
