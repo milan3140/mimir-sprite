@@ -3,12 +3,16 @@ import { join } from 'path'
 
 export type AnchorEdge = 'left' | 'right' | 'top' | 'bottom'
 
+// ponytail: single size constant, tune here
+export const WIN_W = 128
+export const WIN_H = 128
+
 export function createWindow(): BrowserWindow {
   const preload = join(__dirname, '../preload/index.js')
 
   const win = new BrowserWindow({
-    width: 240,
-    height: 280,
+    width: WIN_W,
+    height: WIN_H,
     frame: false,
     transparent: true,
     hasShadow: false,
@@ -36,31 +40,48 @@ export function createWindow(): BrowserWindow {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  // --- Drag via IPC (manual approach, works reliably frameless on Windows) ---
+  // --- Drag driven entirely from main via cursor polling (DPI-safe) ---
   let dragging = false
   let dragOffset = { x: 0, y: 0 }
+  let dragInterval: ReturnType<typeof setInterval> | null = null
 
-  ipcMain.on('drag:start', (_e, mouseX: number, mouseY: number) => {
+  ipcMain.on('drag:start', () => {
+    if (win.isDestroyed()) return
+    const cursor = screen.getCursorScreenPoint()
     const [wx, wy] = win.getPosition()
-    dragOffset = { x: mouseX - wx, y: mouseY - wy }
+    dragOffset = { x: cursor.x - wx, y: cursor.y - wy }
     dragging = true
-  })
 
-  ipcMain.on('drag:move', (_e, mouseX: number, mouseY: number) => {
-    if (!dragging) return
-    win.setPosition(mouseX - dragOffset.x, mouseY - dragOffset.y)
+    // ponytail: poll cursor in main — renderer screenX/Y lies under DPI scaling
+    dragInterval = setInterval(() => {
+      if (!dragging || win.isDestroyed()) {
+        if (dragInterval) clearInterval(dragInterval)
+        return
+      }
+      const c = screen.getCursorScreenPoint()
+      const nx = Math.round(c.x - dragOffset.x)
+      const ny = Math.round(c.y - dragOffset.y)
+      if (!Number.isFinite(nx) || !Number.isFinite(ny)) return
+      win.setPosition(nx, ny)
+    }, 16)
   })
 
   ipcMain.on('drag:end', () => {
     if (!dragging) return
     dragging = false
-    snapToNearestEdge(win)
+    if (dragInterval) { clearInterval(dragInterval); dragInterval = null }
+    if (!win.isDestroyed()) snapToNearestEdge(win)
   })
 
   return win
 }
 
+let snapInterval: ReturnType<typeof setInterval> | null = null
+
 function snapToNearestEdge(win: BrowserWindow): void {
+  // Abort any in-flight snap
+  if (snapInterval) { clearInterval(snapInterval); snapInterval = null }
+
   const [wx, wy] = win.getPosition()
   const [ww, wh] = win.getSize()
   const cursor = screen.getCursorScreenPoint()
@@ -80,44 +101,28 @@ function snapToNearestEdge(win: BrowserWindow): void {
     distances[a] <= distances[b] ? a : b
   )
 
-  // Keep the other axis, clamp into workArea
-  let tx = wx
-  let ty = wy
-
+  let tx = wx, ty = wy
   switch (edge) {
-    case 'left':
-      tx = wa.x
-      ty = clamp(wy, wa.y, wa.y + wa.height - wh)
-      break
-    case 'right':
-      tx = wa.x + wa.width - ww
-      ty = clamp(wy, wa.y, wa.y + wa.height - wh)
-      break
-    case 'top':
-      ty = wa.y
-      tx = clamp(wx, wa.x, wa.x + wa.width - ww)
-      break
-    case 'bottom':
-      ty = wa.y + wa.height - wh
-      tx = clamp(wx, wa.x, wa.x + wa.width - ww)
-      break
+    case 'left':   tx = wa.x;                       ty = clamp(wy, wa.y, wa.y + wa.height - wh); break
+    case 'right':  tx = wa.x + wa.width - ww;       ty = clamp(wy, wa.y, wa.y + wa.height - wh); break
+    case 'top':    ty = wa.y;                        tx = clamp(wx, wa.x, wa.x + wa.width - ww);  break
+    case 'bottom': ty = wa.y + wa.height - wh;       tx = clamp(wx, wa.x, wa.x + wa.width - ww);  break
   }
 
-  // Animate with small steps (~320ms total, ~16ms per frame = ~20 frames)
   const frames = 20
-  const startX = wx
-  const startY = wy
+  const startX = wx, startY = wy
   let frame = 0
 
-  const interval = setInterval(() => {
+  snapInterval = setInterval(() => {
+    if (win.isDestroyed()) { clearInterval(snapInterval!); snapInterval = null; return }
     frame++
     const t = easeOut(frame / frames)
     const x = Math.round(startX + (tx - startX) * t)
     const y = Math.round(startY + (ty - startY) * t)
-    win.setPosition(x, y)
+    if (Number.isFinite(x) && Number.isFinite(y)) win.setPosition(x, y)
     if (frame >= frames) {
-      clearInterval(interval)
-      win.webContents.send('anchor:changed', edge)
+      clearInterval(snapInterval!); snapInterval = null
+      if (!win.isDestroyed()) win.webContents.send('anchor:changed', edge)
     }
   }, 16)
 }

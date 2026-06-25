@@ -1,4 +1,4 @@
-# Mimir-Sprite — Run Notes (Slice 1)
+# Mimir-Sprite — Run Notes (Slice 1b)
 
 ## How to run
 
@@ -9,55 +9,47 @@ npm run build    # production build (electron-vite build)
 npm run typecheck # tsc --noEmit
 ```
 
-## What works (Slice 1)
+## What works
 
-- Transparent frameless always-on-top window (240x280) with pure-CSS Siamese furball
-- Manual drag via IPC (`mousedown` → cursor polling → `win.setPosition`)
+- Transparent frameless always-on-top window (128x128, `WIN_W`/`WIN_H` constant in windowManager.ts)
+- **Oneko sprite** via `SpriteAvatar.tsx` + `spriteConfig.ts` — CSS `steps()` animation, `image-rendering: pixelated`, 96px render size (`AVATAR_PX`). Swap sprite by editing `spriteConfig.ts` + dropping a new sheet.
+- States mapped: idle, walk (2-frame), sleep (2-frame), alert (1-frame)
+- Manual drag: renderer signals start/end, **main polls `screen.getCursorScreenPoint()` at 16ms** — DPI-safe, no renderer screenX/Y
+- All `win.setPosition` calls: `Math.round()` + `Number.isFinite()` guard (fixes Slice 1 crash)
+- Snap animation: guarded against `win.isDestroyed()`, abortable (new drag cancels in-flight snap)
 - Snap to nearest of 4 screen edges on release (animated ~320ms ease-out)
-- Click-through: transparent areas pass to desktop; hovering the cat makes it interactive
-- Cursor-polling fallback (120ms) for click-through — required because Electron's `mouseleave` is unreliable after `setIgnoreMouseEvents(true, {forward:true})` on Windows
-- Tray icon (programmatic 16x16 cream circle) with Show/Hide + Quit menu
-- `Ctrl+Alt+Space` global shortcut to toggle visibility
-- `anchorEdge` sent to renderer so the cat flips orientation (face toward screen center)
-- Design tokens from `docs/03_design_tokens.md` wired into CSS vars + Tailwind config
+- Click-through + cursor-polling fallback (120ms)
+- Tray icon + `Ctrl+Alt+Space` global shortcut
+- `anchorEdge` flips sprite via `scaleX(-1)` (faces screen center)
+- Design tokens wired to Tailwind
 
 ## Windows quirks
 
+### Drag crash (fixed in Slice 1b)
+
+Slice 1 crashed on drag-release: `TypeError: Error processing argument at index 0, conversion failure` in `setPosition`. Root cause: renderer `e.screenX/Y` are **floats under DPI scaling** (125%/150%). Electron requires integer args. Fix: all `setPosition` calls now `Math.round()` + NaN guard. Additionally, drag is now driven entirely from `screen.getCursorScreenPoint()` in main (polled every 16ms while dragging) — this returns DIP-correct integers regardless of display scaling. The renderer no longer sends coordinates at all.
+
+### Wrong snap position under DPI (fixed in Slice 1b)
+
+Under 150% scaling, renderer `screenX/Y` didn't match Electron's DIP coordinate space, causing the cat to snap to the wrong edge or not flush. Fix: snap uses `screen.getDisplayNearestPoint(cursor).workArea` from main (already DIP), no renderer coords involved.
+
 ### Transparency black-box
 
-`BrowserWindow({ transparent: true })` often renders as a black rectangle on Windows 11 with GPU compositing. Fix applied:
-
-```ts
-app.commandLine.appendSwitch('disable-gpu-compositing')  // BEFORE app.whenReady()
-```
-
-This is set in `electron/main/index.ts`. If you still see black, try also:
-
-```ts
-app.disableHardwareAcceleration()  // nuclear option, last resort
-```
+`app.commandLine.appendSwitch('disable-gpu-compositing')` applied before `app.whenReady()`. If still black, try `app.disableHardwareAcceleration()`.
 
 ### Click-through `mouseleave` unreliable
 
-After `setIgnoreMouseEvents(true, {forward:true})`, Electron on Windows does NOT reliably fire `mouseleave` or `:hover` (Electron issue #30808). The cursor-polling fallback in `electron/main/clickThrough.ts` compares `screen.getCursorScreenPoint()` against the cat's bounding rect every 120ms. This is not optional — without it, the window gets stuck in interactive mode after moving the mouse quickly off the cat.
+Cursor-polling fallback in `clickThrough.ts` (120ms, `screen.getCursorScreenPoint()` vs cat rect). Not optional — Electron issue #30808.
 
-### `-webkit-app-region: drag` vs frameless
+### `thickFrame: false` / `roundedCorners: false`
 
-CSS `-webkit-app-region: drag` can cause issues with frameless transparent windows on Windows (double-click maximize, right-click system menu). This slice uses manual drag via IPC instead: renderer captures `mousedown` and polls cursor position, sends deltas to main process which calls `win.setPosition()`. More reliable for this use case.
-
-### `thickFrame: false`
-
-Required to prevent Windows from adding its own resize border and shadow to the frameless window. Without it, you get a visible 1px border around the transparent window.
-
-### `roundedCorners: false`
-
-Win11 auto-rounds window corners even for frameless windows. This flag disables that.
+Required to prevent Win11 resize borders and auto-rounded corners on frameless windows.
 
 ## Stubs / TODO (later slices)
 
 - No todo panel, persistence, store, thinking, or notebooks
-- No sprite sheet — avatar is pure CSS placeholder
-- No PPT/fullscreen detection (needs `get-windows` package, deferred)
-- No `lowdb` persistence
-- Tray icon is a programmatic 16x16 circle — replace with proper `.ico` when available
-- shadcn/ui components.json configured but no components added yet (wired for next slice)
+- Sprite states are declared but only `idle` is active (walk/sleep/alert wired, need state machine triggers)
+- No PPT/fullscreen detection (needs `get-windows`)
+- Tray icon is a programmatic 16x16 circle — replace with proper `.ico`
+- shadcn/ui configured but no components added yet
+- Swap hero sprite to Siamese cat pack when available (edit `spriteConfig.ts`)

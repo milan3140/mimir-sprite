@@ -1,11 +1,6 @@
-import { BrowserWindow, ipcMain, screen } from 'electron'
+import { BrowserWindow } from 'electron'
 
-export function setupIpc(win: BrowserWindow): void {
-  ipcMain.handle('screen:getCursorPos', () => {
-    return screen.getCursorScreenPoint()
-  })
-
-  ipcMain.handle('window:getPosition', () => {
-    return win.getPosition()
-  })
+export function setupIpc(_win: BrowserWindow): void {
+  // ponytail: drag IPC moved to windowManager, cursor polling in main.
+  // Placeholder for future IPC channels (todo:list, think:now, etc.)
 }

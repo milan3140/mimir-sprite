@@ -1,9 +1,9 @@
-import { Avatar } from './components/Avatar'
+import { SpriteAvatar } from './components/SpriteAvatar'
 
 export default function App() {
   return (
     <div className="w-screen h-screen overflow-hidden bg-transparent">
-      <Avatar />
+      <SpriteAvatar />
     </div>
   )
 }
