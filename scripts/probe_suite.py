@@ -153,11 +153,22 @@ def main() -> int:
             sc = wait_new("snap:done", sd_prev, timeout=6)
             check(f"[{edge}] snapped", bool(sc) and sc.get("edge") == edge,
                   f"edge={sc.get('edge') if sc else None}")
-            g.wait(0.4)
+
+            # ponytail: cursor is ON the cat after snap (cat snapped to cursor release
+            # point) — move away FIRST so clickThrough doesn't fire an accidental expand
+            # that increments exp_prev before our check.
+            safe = g.to_physical(wa["x"] + wa["width"] // 2, wa["y"] + wa["height"] // 2, scale)
+            g.move_ghosted(ghost, safe[0], safe[1], dur=0.3)
+            g.wait(0.6)  # let accidental expand/collapse settle + catRect refresh (400ms interval)
 
             # hover the (new) cat position -> expand
-            ccx, ccy = cat_center_dip()
-            c = g.to_physical(ccx, ccy, scale)
+            # Use snap target (ground truth) not potentially-stale cat:screen log
+            if sc and "target" in sc:
+                cat_cx = sc["target"]["x"] + 95  # center of 190x190 window
+                cat_cy = sc["target"]["y"] + 95
+            else:
+                cat_cx, cat_cy = cat_center_dip()
+            c = g.to_physical(cat_cx, cat_cy, scale)
             exp_prev = count("window:expand")
             g.move_ghosted(ghost, c[0], c[1], dur=0.5)
             ev = wait_new("window:expand", exp_prev, timeout=6)

@@ -254,6 +254,13 @@ function snapToNearestEdge(win: BrowserWindow): void {
       clearInterval(snapInterval!); snapInterval = null
       snapping = false
       dockedBounds = { x: tx, y: ty, width: WIN_W, height: WIN_H } // canonical docked position
+      // ponytail: emit fresh cat:screen so probes/tools have accurate position after snap
+      if (latestCatRect.w > 0) {
+        dlog('cat:screen', {
+          x: Math.round(tx + latestCatRect.x), y: Math.round(ty + latestCatRect.y),
+          w: Math.round(latestCatRect.w), h: Math.round(latestCatRect.h)
+        })
+      }
       // ponytail: snap animation sets WIN_W×WIN_H = collapsed; force-reset if stale
       if (currentlyExpanded) {
         currentlyExpanded = false
