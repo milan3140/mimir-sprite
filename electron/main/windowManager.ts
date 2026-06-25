@@ -101,6 +101,11 @@ export function createWindow(): BrowserWindow {
     }, 16)
   })
 
+  // Track the cat sprite's rect within the window (DIP) so snap can align the CAT, not the window.
+  ipcMain.on('cat:rect', (_e, rect: { x: number; y: number; w: number; h: number }) => {
+    if (rect && rect.w > 0 && rect.h > 0) latestCatRect = rect
+  })
+
   ipcMain.on('drag:end', () => {
     if (!dragging) return
     dragging = false
@@ -114,6 +119,7 @@ export function createWindow(): BrowserWindow {
 }
 
 let snapInterval: ReturnType<typeof setInterval> | null = null
+let latestCatRect = { x: 0, y: 0, w: 0, h: 0 }
 
 function snapToNearestEdge(win: BrowserWindow): void {
   if (snapInterval) { clearInterval(snapInterval); snapInterval = null }
@@ -129,41 +135,45 @@ function snapToNearestEdge(win: BrowserWindow): void {
   const dispByWindow = screen.getDisplayMatching({ x: wx, y: wy, width: ww, height: wh })
   const wa = dispByWindow.workArea
 
-  const cx = wx + ww / 2
-  const cy = wy + wh / 2
+  // FIX (H-B): align the CAT sprite box to the edge, not the whole (padded) window.
+  // cr = cat rect within the window (DIP); fall back to full window if not reported yet.
+  const cr = latestCatRect.w > 0 && latestCatRect.h > 0
+    ? latestCatRect : { x: 0, y: 0, w: ww, h: wh }
 
+  // pick nearest edge by the CAT's center (what the user sees), not the window center
+  const ccx = wx + cr.x + cr.w / 2
+  const ccy = wy + cr.y + cr.h / 2
   const distances = {
-    left: cx - wa.x,
-    right: wa.x + wa.width - cx,
-    top: cy - wa.y,
-    bottom: wa.y + wa.height - cy
+    left: ccx - wa.x,
+    right: wa.x + wa.width - ccx,
+    top: ccy - wa.y,
+    bottom: wa.y + wa.height - ccy
   }
 
   const edge = (Object.keys(distances) as AnchorEdge[]).reduce((a, b) =>
     distances[a] <= distances[b] ? a : b
   )
 
-  // raw target (pre-clamp) — H5: if this is ever absurd we'll see it
-  let rawTx = wx, rawTy = wy
+  // Flush the CAT box to the edge. The flush axis may push the transparent window margin
+  // off-screen (intended). The perpendicular axis keeps the whole window on-screen.
+  let tx = wx, ty = wy
   switch (edge) {
-    case 'left':   rawTx = wa.x;                  rawTy = wy; break
-    case 'right':  rawTx = wa.x + wa.width - ww;  rawTy = wy; break
-    case 'top':    rawTy = wa.y;                  rawTx = wx; break
-    case 'bottom': rawTy = wa.y + wa.height - wh; rawTx = wx; break
+    case 'left':   tx = wa.x - cr.x;                      ty = clamp(wy, wa.y, wa.y + wa.height - wh); break
+    case 'right':  tx = wa.x + wa.width - (cr.x + cr.w);  ty = clamp(wy, wa.y, wa.y + wa.height - wh); break
+    case 'top':    ty = wa.y - cr.y;                      tx = clamp(wx, wa.x, wa.x + wa.width - ww);  break
+    case 'bottom': ty = wa.y + wa.height - (cr.y + cr.h); tx = clamp(wx, wa.x, wa.x + wa.width - ww);  break
   }
-  // clamp both axes into workArea so it can never end outside / accumulate
-  const tx = Math.round(clamp(rawTx, wa.x, wa.x + wa.width - ww))
-  const ty = Math.round(clamp(rawTy, wa.y, wa.y + wa.height - wh))
+  tx = Math.round(tx); ty = Math.round(ty)
 
   dlog('snap:compute', {
     winPos: { x: wx, y: wy }, sizeUsed: { w: ww, h: wh },
-    reportedSize: { w: reportedW, h: reportedH }, // H3: should now stay ~190 after the setBounds fix
+    reportedSize: { w: reportedW, h: reportedH }, // H3: should stay ~190 after the setBounds fix
+    catRect: cr, catInset: { x: cr.x, y: cr.y },  // H-B: gap-to-edge should ≈ this inset before fix
     cursorDispId: dispByCursor.id, windowDispId: dispByWindow.id, // H4
     sameDisplay: dispByCursor.id === dispByWindow.id,
     scaleFactor: dispByWindow.scaleFactor,                         // H1
     workArea: wa,                                                  // H2
-    distances, edge, raw: { x: rawTx, y: rawTy }, target: { x: tx, y: ty },
-    clampedTarget: rawTx !== tx || rawTy !== ty                    // H5
+    distances, edge, target: { x: tx, y: ty }
   })
 
   const frames = 20

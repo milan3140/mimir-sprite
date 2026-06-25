@@ -95,7 +95,9 @@ export function SpriteAvatar() {
             transform: flipX ? 'scaleX(-1)' : undefined,
             ...(n === 1
               ? { backgroundPosition: `-${f0[0] * tileW * scale}px -${f0[1] * tileH * scale}px` }
-              : { animation: `${key} ${n / fps}s steps(${n}) infinite` }
+              // step-end: HOLD each frame for its slice, no interpolation between frames.
+              // (steps(n) here sub-stepped bg-position between adjacent frames => the sliding/seam bug)
+              : { animation: `${key} ${n / fps}s step-end infinite` }
             )
           }}
         />
@@ -113,7 +115,8 @@ function buildKeyframes(
     const pct = (i / frames.length * 100).toFixed(2)
     return `${pct}%{background-position:-${f[0] * tileW * scale}px -${f[1] * tileH * scale}px}`
   })
-  const f0 = frames[0]
-  kf.push(`100%{background-position:-${f0[0] * tileW * scale}px -${f0[1] * tileH * scale}px}`)
+  // with step-end the 100% value isn't rendered, but hold the LAST frame for clarity
+  const fl = frames[frames.length - 1]
+  kf.push(`100%{background-position:-${fl[0] * tileW * scale}px -${fl[1] * tileH * scale}px}`)
   return `@keyframes ${name}{${kf.join('')}}`
 }
