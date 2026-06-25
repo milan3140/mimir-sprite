@@ -4,9 +4,9 @@ import { dlog } from './debugLog'
 
 export type AnchorEdge = 'left' | 'right' | 'top' | 'bottom'
 
-// single size constant, tune here
-export const WIN_W = 128
-export const WIN_H = 128
+// single size constant, tune here. Bigger window = bigger cat (see spriteConfig scale).
+export const WIN_W = 190
+export const WIN_H = 190
 
 export function createWindow(): BrowserWindow {
   const preload = join(__dirname, '../preload/index.js')
@@ -87,14 +87,15 @@ export function createWindow(): BrowserWindow {
         dlog('drag:move:NONFINITE', { rawX, rawY }) // H5
         return
       }
-      win.setPosition(nx, ny)
+      // FIX (H3): setBounds with FIXED width/height re-asserts size every frame, so the
+      // Win11 transparent-window DPI inflation can't accumulate (was growing 128→737).
+      win.setBounds({ x: nx, y: ny, width: WIN_W, height: WIN_H })
       pollCount++
-      // throttle: log ~every 200ms, plus any time clamp kicked in (H5)
       if (clamped || pollCount % 12 === 0) {
-        const [ax, ay] = win.getPosition() // actual after set — round-trip reveals DPI drift (H1)
+        const [ax, ay] = win.getPosition()
+        const [sw, sh] = win.getSize() // confirm size stays pinned now
         dlog('drag:move', {
-          cursor: c, rawX, rawY, set: { x: nx, y: ny }, actual: { x: ax, y: ay },
-          driftX: ax - nx, driftY: ay - ny, clamped
+          cursor: c, set: { x: nx, y: ny }, actual: { x: ax, y: ay }, size: { w: sw, h: sh }, clamped
         })
       }
     }, 16)
@@ -118,7 +119,9 @@ function snapToNearestEdge(win: BrowserWindow): void {
   if (snapInterval) { clearInterval(snapInterval); snapInterval = null }
 
   const [wx, wy] = win.getPosition()
-  const [ww, wh] = win.getSize()
+  const [reportedW, reportedH] = win.getSize() // logged only; may be momentarily inflated
+  // Use the CONSTANT size for all math so inflation can't poison the snap target (H3)
+  const ww = WIN_W, wh = WIN_H
   const cursor = screen.getCursorScreenPoint()
 
   // H4: compare the display under the cursor vs the display under the window center
@@ -153,7 +156,8 @@ function snapToNearestEdge(win: BrowserWindow): void {
   const ty = Math.round(clamp(rawTy, wa.y, wa.y + wa.height - wh))
 
   dlog('snap:compute', {
-    winPos: { x: wx, y: wy }, winSize: { w: ww, h: wh },
+    winPos: { x: wx, y: wy }, sizeUsed: { w: ww, h: wh },
+    reportedSize: { w: reportedW, h: reportedH }, // H3: should now stay ~190 after the setBounds fix
     cursorDispId: dispByCursor.id, windowDispId: dispByWindow.id, // H4
     sameDisplay: dispByCursor.id === dispByWindow.id,
     scaleFactor: dispByWindow.scaleFactor,                         // H1
@@ -172,7 +176,8 @@ function snapToNearestEdge(win: BrowserWindow): void {
     const t = easeOut(frame / frames)
     const x = Math.round(startX + (tx - startX) * t)
     const y = Math.round(startY + (ty - startY) * t)
-    if (Number.isFinite(x) && Number.isFinite(y)) win.setPosition(x, y)
+    // setBounds (not setPosition) to keep size pinned during the snap too (H3 fix)
+    if (Number.isFinite(x) && Number.isFinite(y)) win.setBounds({ x, y, width: WIN_W, height: WIN_H })
     if (frame >= frames) {
       clearInterval(snapInterval!); snapInterval = null
       const [ax, ay] = win.getPosition()

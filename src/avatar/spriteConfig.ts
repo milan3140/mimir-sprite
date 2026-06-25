@@ -47,7 +47,7 @@ export const avatarSets: Record<string, AvatarSet> = {
     label: 'LuizMelo Cat',
     tileW: 50,
     tileH: 50,
-    scale: 2,
+    scale: 3,
     states: {
       idle:  { image: new URL('../../assets/sprites/luizmelo/Cat-1-Idle.png', import.meta.url).href,     cols: 10, rows: 1, frames: strip(10), fps: 8 },
       walk:  { image: new URL('../../assets/sprites/luizmelo/Cat-1-Walk.png', import.meta.url).href,     cols: 8,  rows: 1, frames: strip(8),  fps: 8 },
