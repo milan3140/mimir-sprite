@@ -138,45 +138,46 @@ function TodoRow({ todo }: { todo: Todo }) {
       <div className={`w-0.5 self-stretch rounded-full ${isActive ? 'bg-[var(--brand)]' : 'bg-transparent'}`} />
 
       {/* visual drag affordance */}
-      <GripVertical size={14} className="text-[var(--fg-faint)] shrink-0" />
+      <GripVertical size={14} className="text-[var(--fg-muted)] shrink-0" />
 
       {/* Title: click to edit, or truncate */}
       {editing ? (
         <EditableTitle todo={todo} onDone={() => setEditing(false)} />
       ) : (
+        // #1: rename only on DOUBLE-click; no pointerDown-stop so the title area still drags,
+        // and a single click bubbles to the row (toggles detail). Show only the first line.
         <span
-          className="flex-1 text-xs text-[var(--fg)] truncate select-none cursor-text"
+          className="flex-1 text-xs text-[var(--fg)] truncate select-none"
           onDoubleClick={(e) => { e.stopPropagation(); setEditing(true) }}
-          onClick={(e) => { e.stopPropagation(); setEditing(true) }}
-          onPointerDown={e => e.stopPropagation()}
+          title="Double-click to rename"
         >
-          {todo.title}
+          {todo.title.split('\n')[0]}
         </span>
       )}
 
       {/* Controls */}
       <div className="flex items-center gap-0.5 shrink-0" data-no-drag>
         {(todo.status === 'pending' || todo.status === 'paused') && (
-          <button onClick={() => window.api.todoStart(todo.id)} className="text-[var(--fg-muted)] hover:text-[var(--success)]" aria-label="Start">
+          <button onClick={() => window.api.todoStart(todo.id)} className="text-[var(--fg)] hover:text-[var(--success)]" aria-label="Start">
             <Play size={14} />
           </button>
         )}
         {isActive && (
-          <button onClick={() => window.api.todoPause(todo.id)} className="text-[var(--fg-muted)] hover:text-[var(--warning)]" aria-label="Pause">
+          <button onClick={() => window.api.todoPause(todo.id)} className="text-[var(--fg)] hover:text-[var(--warning)]" aria-label="Pause">
             <Pause size={14} />
           </button>
         )}
         {(isActive || todo.status === 'paused') && (
-          <button onClick={() => window.api.todoComplete(todo.id)} className="text-[var(--fg-muted)] hover:text-[var(--success)]" aria-label="Complete">
+          <button onClick={() => window.api.todoComplete(todo.id)} className="text-[var(--fg)] hover:text-[var(--success)]" aria-label="Complete">
             <Check size={14} />
           </button>
         )}
         {/* ponytail: stub — thinking is a later slice */}
-        <button className="text-[var(--fg-faint)] opacity-40 cursor-default" aria-label="Think (coming soon)">
+        <button className="text-[var(--fg-muted)] opacity-40 cursor-default" aria-label="Think (coming soon)">
           <Brain size={14} />
         </button>
         {hovered && (
-          <button onClick={() => window.api.todoRemove(todo.id)} className="text-[var(--fg-muted)] hover:text-[var(--danger)]" aria-label="Delete">
+          <button onClick={() => window.api.todoRemove(todo.id)} className="text-[var(--fg)] hover:text-[var(--danger)]" aria-label="Delete">
             <Trash2 size={14} />
           </button>
         )}

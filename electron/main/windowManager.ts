@@ -13,8 +13,11 @@ const PANEL_H = 360
 let currentlyExpanded = false
 let currentEdge: AnchorEdge = 'right'
 let collapsedBounds: Rectangle | null = null
+let snapping = false                       // true while the ~320ms snap animation runs
+let dockedBounds: Rectangle | null = null  // the FINAL docked (edge) collapsed bounds
 
 export function isExpanded(): boolean { return currentlyExpanded }
+export function isSnapping(): boolean { return snapping }
 
 export function createWindow(): BrowserWindow {
   const preload = join(__dirname, '../preload/index.js')
@@ -128,8 +131,11 @@ export function createWindow(): BrowserWindow {
 // --- Expand/Collapse: cat stays EXACTLY where it was, panel grows toward center ---
 
 export function expandWindow(win: BrowserWindow): void {
-  if (win.isDestroyed() || currentlyExpanded) return
-  collapsedBounds = win.getBounds()
+  // Never expand mid-snap, and expand from the TRUE docked edge bounds — not getBounds(), which
+  // can be a mid-animation position (that was the "re-hover returns to the previous position,
+  // not docked at the edge" bug). dockedBounds is set when the snap animation finishes.
+  if (win.isDestroyed() || currentlyExpanded || snapping) return
+  collapsedBounds = dockedBounds ?? win.getBounds()
   const { x: wx, y: wy } = collapsedBounds
 
   let bx: number, by: number, bw: number, bh: number
@@ -219,9 +225,10 @@ function snapToNearestEdge(win: BrowserWindow): void {
   const frames = 20
   const startX = wx, startY = wy
   let frame = 0
+  snapping = true // block hover-expand until the cat is docked at the edge
 
   snapInterval = setInterval(() => {
-    if (win.isDestroyed()) { clearInterval(snapInterval!); snapInterval = null; return }
+    if (win.isDestroyed()) { clearInterval(snapInterval!); snapInterval = null; snapping = false; return }
     frame++
     const t = easeOut(frame / frames)
     const x = Math.round(startX + (tx - startX) * t)
@@ -229,6 +236,8 @@ function snapToNearestEdge(win: BrowserWindow): void {
     if (Number.isFinite(x) && Number.isFinite(y)) win.setBounds({ x, y, width: WIN_W, height: WIN_H })
     if (frame >= frames) {
       clearInterval(snapInterval!); snapInterval = null
+      snapping = false
+      dockedBounds = { x: tx, y: ty, width: WIN_W, height: WIN_H } // canonical docked position
       const [ax, ay] = win.getPosition()
       dlog('snap:done', { target: { x: tx, y: ty }, actual: { x: ax, y: ay }, edge })
       if (!win.isDestroyed()) win.webContents.send('anchor:changed', edge)
