@@ -83,3 +83,10 @@ input:focus { box-shadow: 0 0 0 1px var(--ring) !important; }
 .panel-slide-left   { animation: slide-from-left   140ms var(--ease) both; }
 .panel-slide-top    { animation: slide-from-top    140ms var(--ease) both; }
 .panel-slide-bottom { animation: slide-from-bottom 140ms var(--ease) both; }
+
+/* ponytail: recall nub — gentle attention pulse so a stranger notices it's clickable */
+@keyframes nub-pulse {
+  0%, 100% { filter: brightness(0.92); }
+  50%      { filter: brightness(1.18); }
+}
+.nub-pulse { animation: nub-pulse 1.7s ease-in-out infinite; }

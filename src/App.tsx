@@ -9,18 +9,29 @@ const CAT_H = 190 // must match WIN_H in windowManager
 
 // ponytail: tiny clickable tab at the docked edge when hidden
 function Nub({ edge }: { edge: string }) {
-  const Chevron = ({ right: ChevronLeft, left: ChevronRight, top: ChevronDown, bottom: ChevronUp } as const)[
-    edge as 'left' | 'right' | 'top' | 'bottom'
-  ] ?? ChevronLeft
+  const e = (edge as 'left' | 'right' | 'top' | 'bottom') ?? 'right'
+  // chevron points AWAY from the edge (the direction the sprite pops back out)
+  const Chevron = ({ right: ChevronLeft, left: ChevronRight, top: ChevronDown, bottom: ChevronUp } as const)[e]
+  // flat side hugs the screen edge; round the inner side only
+  const radius = ({
+    left:   '0 11px 11px 0',
+    right:  '11px 0 0 11px',
+    top:    '0 0 11px 11px',
+    bottom: '11px 11px 0 0',
+  } as const)[e]
 
   return (
     <div
-      className="w-full h-full flex items-center justify-center cursor-pointer"
-      style={{ background: 'var(--surface)', borderRadius: 3 }}
+      className="w-full h-full flex items-center justify-center cursor-pointer nub-pulse"
+      style={{
+        background: 'var(--brand)',
+        borderRadius: radius,
+        boxShadow: '0 2px 10px hsl(var(--hue) 40% 3% / 0.5)'
+      }}
       onClick={() => window.api.windowRestore()}
       title="Click to show Mimir (Ctrl+Alt+Space)"
     >
-      <Chevron size={10} style={{ color: 'var(--brand)' }} />
+      <Chevron size={15} strokeWidth={2.75} style={{ color: 'white' }} />
     </div>
   )
 }

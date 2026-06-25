@@ -10,8 +10,8 @@ export const WIN_H = 190
 const PANEL_W = 200
 const PANEL_H = 360
 
-const NUB_W = 12
-const NUB_H = 46
+const NUB_W = 18  // nub thickness (protrusion from edge) — prominent enough for a stranger to spot
+const NUB_H = 76  // nub length along the edge
 
 let currentlyExpanded = false
 let currentEdge: AnchorEdge = 'right'
@@ -201,23 +201,37 @@ export function hideToNub(win: BrowserWindow): void {
   preHideBounds = dockedBounds ?? win.getBounds()
   const { x: wx, y: wy } = preHideBounds
 
-  let nx: number, ny: number, nw: number, nh: number
+  // The docked window hangs PARTLY OFF-SCREEN (cat's visible pixels are flush to the edge, the
+  // transparent margin spills past it). So anchoring the nub to the WINDOW bounds put it in the
+  // off-screen margin → invisible. Anchor to the SCREEN workArea edge instead, centred on the
+  // cat's visible content.
+  const wa = screen.getDisplayMatching(preHideBounds).workArea
+  const cr = latestCatRect.w > 0 && latestCatRect.h > 0
+    ? latestCatRect : { x: 0, y: 0, w: WIN_W, h: WIN_H }
+  const catCx = wx + cr.x + cr.w / 2
+  const catCy = wy + cr.y + cr.h / 2
+
+  let nx = 0, ny = 0, nw = 0, nh = 0
   switch (currentEdge) {
     case 'left':
-      nx = wx; ny = wy + Math.round((WIN_H - NUB_H) / 2); nw = NUB_W; nh = NUB_H; break
+      nw = NUB_W; nh = NUB_H
+      nx = wa.x; ny = clamp(Math.round(catCy - nh / 2), wa.y, wa.y + wa.height - nh); break
     case 'right':
-      nx = wx + WIN_W - NUB_W; ny = wy + Math.round((WIN_H - NUB_H) / 2); nw = NUB_W; nh = NUB_H; break
+      nw = NUB_W; nh = NUB_H
+      nx = wa.x + wa.width - nw; ny = clamp(Math.round(catCy - nh / 2), wa.y, wa.y + wa.height - nh); break
     case 'top':
-      nx = wx + Math.round((WIN_W - NUB_H) / 2); ny = wy; nw = NUB_H; nh = NUB_W; break
+      nw = NUB_H; nh = NUB_W
+      ny = wa.y; nx = clamp(Math.round(catCx - nw / 2), wa.x, wa.x + wa.width - nw); break
     case 'bottom':
-      nx = wx + Math.round((WIN_W - NUB_H) / 2); ny = wy + WIN_H - NUB_W; nw = NUB_H; nh = NUB_W; break
+      nw = NUB_H; nh = NUB_W
+      ny = wa.y + wa.height - nh; nx = clamp(Math.round(catCx - nw / 2), wa.x, wa.x + wa.width - nw); break
   }
 
   hidden = true
   win.setBounds({ x: nx, y: ny, width: nw, height: nh })
   win.setIgnoreMouseEvents(false) // nub fully clickable
   win.webContents.send('window:hidden', { hidden: true, edge: currentEdge })
-  dlog('window:hideToNub', { preHideBounds, nub: { x: nx, y: ny, w: nw, h: nh }, edge: currentEdge })
+  dlog('window:hideToNub', { preHideBounds, nub: { x: nx, y: ny, w: nw, h: nh }, edge: currentEdge, wa })
 }
 
 export function restoreFromNub(win: BrowserWindow): void {
