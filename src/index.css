@@ -5,12 +5,13 @@
 :root {
   --hue: 265;
 
-  /* Surface: dark glass */
-  --bg:            hsl(var(--hue) 18% 8%  / 0.72);
+  /* Surface: near-opaque dark (legible over busy desktops; transparency made it an unreadable,
+     gappy smear over background content — D1/D2 from the design self-audit) */
+  --bg:            hsl(var(--hue) 18% 9%  / 0.97);
   --bg-solid:      hsl(var(--hue) 18% 8%);
-  --surface:       hsl(var(--hue) 16% 13% / 0.9);
-  --surface-hover: hsl(var(--hue) 16% 18%);
-  --border:        hsl(var(--hue) 14% 26% / 0.6);
+  --surface:       hsl(var(--hue) 16% 14% / 0.99);
+  --surface-hover: hsl(var(--hue) 16% 20%);
+  --border:        hsl(var(--hue) 14% 28% / 0.85);
 
   /* Text */
   --fg:            hsl(var(--hue) 12% 92%);
