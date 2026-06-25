@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain, screen } from 'electron'
-import { isExpanded, expandWindow, collapseWindow } from './windowManager'
+import { isExpanded, isHidden, expandWindow, collapseWindow } from './windowManager'
 
 /**
  * Main-process cursor controller for the floating window (single source of truth):
@@ -27,7 +27,7 @@ export function setupClickThrough(win: BrowserWindow): void {
   }
 
   setInterval(() => {
-    if (win.isDestroyed() || !win.isVisible()) return
+    if (win.isDestroyed() || !win.isVisible() || isHidden()) return
     const cursor = screen.getCursorScreenPoint()
     const b = win.getBounds()
 

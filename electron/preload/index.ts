@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('api', {
   windowExpand: () => ipcRenderer.send('window:expand'),
   windowCollapse: () => ipcRenderer.send('window:collapse'),
   windowHide: () => ipcRenderer.send('window:hide'),
+  windowRestore: () => ipcRenderer.send('window:restore'),
 
   // Events from main
   onAnchorChanged: (cb: (edge: string) => void) => {
@@ -51,6 +52,11 @@ contextBridge.exposeInMainWorld('api', {
   todoPause: (id: string) => ipcRenderer.invoke('todo:pause', id),
   todoComplete: (id: string) => ipcRenderer.invoke('todo:complete', id),
   appSetMode: (mode: string) => ipcRenderer.invoke('app:setMode', mode),
+  onHiddenChanged: (cb: (v: { hidden: boolean; edge: string }) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, v: { hidden: boolean; edge: string }): void => { cb(v) }
+    ipcRenderer.on('window:hidden', h)
+    return () => { ipcRenderer.removeListener('window:hidden', h) }
+  },
   storeGet: () => ipcRenderer.invoke('store:get'),
   sendPanelRects: (rects: unknown) => ipcRenderer.send('panel:rects', rects),
 })

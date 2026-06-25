@@ -10,15 +10,21 @@ export const WIN_H = 190
 const PANEL_W = 200
 const PANEL_H = 360
 
+const NUB_W = 12
+const NUB_H = 46
+
 let currentlyExpanded = false
 let currentEdge: AnchorEdge = 'right'
 let collapsedBounds: Rectangle | null = null
 let snapping = false                       // true while the ~320ms snap animation runs
 let dockedBounds: Rectangle | null = null  // the FINAL docked (edge) collapsed bounds
 let dragging = false                       // true while mouse-drag is active
+let hidden = false                         // true while showing the edge nub
+let preHideBounds: Rectangle | null = null
 
 export function isExpanded(): boolean { return currentlyExpanded }
 export function isSnapping(): boolean { return snapping }
+export function isHidden(): boolean { return hidden }
 
 export function createWindow(): BrowserWindow {
   const preload = join(__dirname, '../preload/index.js')
@@ -145,7 +151,7 @@ export function createWindow(): BrowserWindow {
 export function expandWindow(win: BrowserWindow): void {
   // Never expand mid-snap or mid-drag; expand from the TRUE docked edge bounds — not getBounds(),
   // which can be a mid-animation position. dockedBounds is set when the snap animation finishes.
-  if (win.isDestroyed() || currentlyExpanded || snapping || dragging) return
+  if (win.isDestroyed() || currentlyExpanded || snapping || dragging || hidden) return
   collapsedBounds = dockedBounds ?? win.getBounds()
   const { x: wx, y: wy } = collapsedBounds
 
@@ -185,6 +191,42 @@ export function collapseWindow(win: BrowserWindow): void {
   win.setIgnoreMouseEvents(true, { forward: true })
   win.webContents.send('window:expanded', { expanded: false, edge: currentEdge })
   dlog('window:collapse', { to: collapsedBounds, edge: currentEdge })
+}
+
+// --- Hide to nub / restore ---
+
+export function hideToNub(win: BrowserWindow): void {
+  if (win.isDestroyed() || hidden) return
+  if (currentlyExpanded) collapseWindow(win)
+  preHideBounds = dockedBounds ?? win.getBounds()
+  const { x: wx, y: wy } = preHideBounds
+
+  let nx: number, ny: number, nw: number, nh: number
+  switch (currentEdge) {
+    case 'left':
+      nx = wx; ny = wy + Math.round((WIN_H - NUB_H) / 2); nw = NUB_W; nh = NUB_H; break
+    case 'right':
+      nx = wx + WIN_W - NUB_W; ny = wy + Math.round((WIN_H - NUB_H) / 2); nw = NUB_W; nh = NUB_H; break
+    case 'top':
+      nx = wx + Math.round((WIN_W - NUB_H) / 2); ny = wy; nw = NUB_H; nh = NUB_W; break
+    case 'bottom':
+      nx = wx + Math.round((WIN_W - NUB_H) / 2); ny = wy + WIN_H - NUB_W; nw = NUB_H; nh = NUB_W; break
+  }
+
+  hidden = true
+  win.setBounds({ x: nx, y: ny, width: nw, height: nh })
+  win.setIgnoreMouseEvents(false) // nub fully clickable
+  win.webContents.send('window:hidden', { hidden: true, edge: currentEdge })
+  dlog('window:hideToNub', { preHideBounds, nub: { x: nx, y: ny, w: nw, h: nh }, edge: currentEdge })
+}
+
+export function restoreFromNub(win: BrowserWindow): void {
+  if (win.isDestroyed() || !hidden) return
+  hidden = false
+  if (preHideBounds) win.setBounds(preHideBounds)
+  win.setIgnoreMouseEvents(true, { forward: true })
+  win.webContents.send('window:hidden', { hidden: false, edge: currentEdge })
+  dlog('window:restoreFromNub', { bounds: preHideBounds, edge: currentEdge })
 }
 
 // --- Snap ---

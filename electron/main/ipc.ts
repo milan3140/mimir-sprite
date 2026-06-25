@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { dlog } from './debugLog'
+import { hideToNub, restoreFromNub } from './windowManager'
 import {
   getTodos, getAppState, getSnapshot, addTodo, updateTodo, removeTodo,
   reorderTodos, startTodo, pauseTodo, completeTodo, setMode
@@ -19,7 +20,8 @@ export function setupIpc(win: BrowserWindow): void {
   ipcMain.handle('app:getState', () => getAppState())
   ipcMain.handle('store:get', () => getSnapshot())
 
-  ipcMain.on('window:hide', () => win.hide())
+  ipcMain.on('window:hide', () => hideToNub(win))
+  ipcMain.on('window:restore', () => restoreFromNub(win))
   // ponytail: panel element rects for self-test probes
   ipcMain.on('panel:rects', (_e, rects: unknown) => dlog('panel:rects', rects))
 }

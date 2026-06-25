@@ -1,5 +1,6 @@
 import { BrowserWindow, Tray, Menu, globalShortcut, nativeImage, app } from 'electron'
 import { dlog } from './debugLog'
+import { isHidden, hideToNub, restoreFromNub } from './windowManager'
 
 let tray: Tray | null = null
 
@@ -43,7 +44,9 @@ function rebuildMenu(win: BrowserWindow): void {
 }
 
 function toggleVisibility(win: BrowserWindow): void {
-  if (win.isVisible()) { win.hide() }
+  // ponytail: nub state is "visible but tiny" — restore from nub first
+  if (isHidden()) { restoreFromNub(win); return }
+  if (win.isVisible()) { hideToNub(win) }
   else { win.show(); win.setAlwaysOnTop(true, 'screen-saver') }
 }
 
