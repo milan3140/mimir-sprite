@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"D:/AI_Agents_Projects/0_Project-Mimir/2_Toolkit/Output/1D/Code/ponytail/upstream/hooks/ponytail-activate.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"D:/AI_Agents_Projects/0_Project-Mimir/2_Toolkit/Output/1D/Code/ponytail/upstream/hooks/ponytail-mode-tracker.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

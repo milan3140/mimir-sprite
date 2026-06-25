@@ -31,6 +31,7 @@ interface Todo {
   lastStartedAt?: number         // 當前這段 active 的起點(算 totalActiveMs)
   thinkingSessionIds: string[]   // 對此項目做過的 thinking(可多次)
   notebookIds: string[]          // 此項目的筆記本(補充 3,可多本)
+  attachments?: Attachment[]     // 新增任務對話框貼上的截圖/檔案;點項目可察看(共用 Attachment)
   completionLogPath?: string     // 完成後寫出的 log 檔路徑(見 09)
 }
 ```
@@ -96,9 +97,23 @@ interface NoteMessage {
   id: string
   text: string
   createdAt: number
+  attachments?: Attachment[]     // 預留:貼上截圖/附加檔案(impl 在 M4,貼圖優先)
   // 預留:author 之後若引入 AI 共筆可加 'user'|'assistant';MVP 只有 user
 }
+
+// 附件:二進位「不」進 db.json,存磁碟、這裡只放 metadata + 相對路徑
+interface Attachment {
+  id: string
+  kind: 'image' | 'file'
+  path: string                   // 相對 userData/mimir-sprite/attachments/<notebookId>/
+  name: string                   // 顯示名/原始檔名
+  mime?: string
+  bytes?: number
+  width?: number; height?: number // 圖片用,排版/縮圖
+  createdAt: number
+}
 ```
+**附件儲存約定**:檔案落 `userData/mimir-sprite/attachments/<owner>/<ownerId>/<attachmentId>.<ext>`,`owner` ∈ `todo` | `notebook`(同一套機制兩處共用)。刪 todo/message/notebook 時連帶清檔(避免孤兒)。Ctrl+V 貼上 = renderer paste 事件取 image blob(或 main `clipboard.readImage()`)→ 存 png → 建 Attachment。**貼圖機制做一份**:先供「新增任務對話框」(M3)用,筆記本(M4)沿用;拖放檔案/檔案選擇器隨後補。
 **多本整合策略(回答開放問題)**:活著時**不合併**——各 thread 在項目記錄裡以手風琴/分頁分開列出(按 `updatedAt` 排)。整合只發生在:① 完成時 LLM 把所有 notebook + thinking 一起萃取成完成 Log(09);② 手動「整理筆記」按鈕讓 LLM 即時濃縮。兩者都延後到有 ClaudeRunner(M7)。
 
 > Todo 的「記錄/時間軸」= thinkingSessions ∪ notebooks ∪ 狀態變更,完成 Log 即是這條時間軸的合成。

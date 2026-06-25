@@ -64,12 +64,21 @@ schema 見 [02](02_data_schema.md)(`Notebook` / `NoteMessage`)。
   2. 手動「整理筆記」按鈕 → LLM 即時把多本濃縮成一段摘要(寫回記錄,不動原 thread)。
 - **MVP(M4)只做**:多本獨立 thread + 分開列出 + resume。合成是 M7。
 
+## 附件 / 貼上截圖(M4,貼圖優先)
+筆記本訊息可帶附件,**最常用的是 Ctrl+V 貼上截圖**。
+- **貼圖流程**:輸入框 `paste` 事件抓 `clipboardData` 的 image blob(或 main 用 `clipboard.readImage()`)→ IPC `notebook:attachImage(id, dataURL)` → main 存成 png 到 `userData/mimir-sprite/attachments/<notebookId>/<attId>.png` → 建 `Attachment` 掛到該 message → 回傳路徑。
+- **顯示**:訊息泡泡內嵌縮圖(`width/height` 來排版),點開看原圖。
+- **二進位不進 db.json**,只存 metadata + 相對路徑(見 [02](02_data_schema.md))。刪訊息/筆記本連帶清檔。
+- 拖放檔案、檔案選擇器(kind:'file')隨後補;LLM 合成(09)目前只引用附件路徑/檔名,要讀圖內容再評估 vision。
+- Schema 欄位(`NoteMessage.attachments` / `Attachment`)**已先預留**,M4 直接實作不需 migration。
+
 ## IPC channel(補)
 ```
 notebook:open(todoId, notebookId?)   notebook:append(id, text)
 notebook:list(todoId)                notebook:rename(id, title)
 notebook:close(id)                   notebook:archive(id)
-notebook:setWindowState(id, rect)
+notebook:setWindowState(id, rect)    notebook:attachImage(id, dataURL)
+notebook:attachFile(id, srcPath)
 event: notebook:changed(notebook)
 ```
 
