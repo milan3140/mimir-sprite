@@ -4,3 +4,5 @@ dist/
 *.tsbuildinfo
 .claude/.ponytail-session
 mimir-debug.log
+_devout.txt
+_probe_shots/

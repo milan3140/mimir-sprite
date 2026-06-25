@@ -8,17 +8,24 @@ import { join } from 'path'
  * Toggle with env MIMIR_DEBUG=0 to silence.
  */
 const ENABLED = process.env.MIMIR_DEBUG !== '0'
-const LOG_PATH = join(app.getAppPath(), 'mimir-debug.log')
+
+// Lazy: app.getAppPath() must NOT run at module top level — `app` is undefined until the
+// electron main process is ready, which crashed startup. Resolve on first use instead.
+let _logPath = ''
+function logPath(): string {
+  if (!_logPath) _logPath = join(app.getAppPath(), 'mimir-debug.log')
+  return _logPath
+}
 
 export function initDebugLog(): void {
   if (!ENABLED) return
   try {
-    writeFileSync(LOG_PATH, `=== Mimir-Sprite debug log @ ${new Date().toISOString()} ===\n`)
+    writeFileSync(logPath(), `=== Mimir-Sprite debug log @ ${new Date().toISOString()} ===\n`)
   } catch {
     /* ignore */
   }
   // eslint-disable-next-line no-console
-  console.log('[mimir-debug] logging to', LOG_PATH)
+  console.log('[mimir-debug] logging to', logPath())
   dumpDisplays('startup')
 }
 
@@ -26,7 +33,7 @@ export function dlog(tag: string, data?: Record<string, unknown>): void {
   if (!ENABLED) return
   const line = `[${new Date().toISOString()}] ${tag}${data ? ' ' + JSON.stringify(data) : ''}`
   try {
-    appendFileSync(LOG_PATH, line + '\n')
+    appendFileSync(logPath(), line + '\n')
   } catch {
     /* ignore */
   }
@@ -48,4 +55,4 @@ export function dumpDisplays(when: string): void {
   dlog(`displays:${when}`, { primary, cursor, displays })
 }
 
-export const DEBUG_LOG_PATH = LOG_PATH
+export function debugLogPath(): string { return logPath() }
