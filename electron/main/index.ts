@@ -4,7 +4,7 @@ import { setupClickThrough } from './clickThrough'
 import { setupTray } from './tray'
 import { setupIpc, broadcastStore } from './ipc'
 import { initDebugLog } from './debugLog'
-import { initStore } from './store'
+import { initStore, getTodos, getAppState } from './store'
 
 // ponytail: disable-gpu-compositing prevents the Win11 transparent-window-renders-black bug
 app.commandLine.appendSwitch('disable-gpu-compositing')
@@ -21,6 +21,13 @@ app.whenReady().then(async () => {
   // init store — broadcast changes to renderer
   const w = win
   await initStore((snap) => broadcastStore(w, snap))
+
+  // #A fix: the initStore broadcast can race ahead of the renderer registering its listener,
+  // leaving the panel showing "No todos yet" until the first mutation. Re-push the snapshot
+  // whenever the renderer (re)finishes loading, so it always has the current state on mount.
+  w.webContents.on('did-finish-load', () =>
+    broadcastStore(w, { todos: getTodos(), appState: getAppState() })
+  )
 })
 
 app.on('window-all-closed', () => app.quit())

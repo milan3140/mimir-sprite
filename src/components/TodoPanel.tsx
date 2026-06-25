@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import {
-  Coffee, EyeOff, GripVertical, Play, Pause, Check, Brain, Trash2, Plus, X
+  Coffee, EyeOff, ChevronRight, ChevronDown, Play, Pause, Check, Brain, Trash2, Plus, X
 } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -79,8 +79,8 @@ function DetailPopover({ todo, onClose }: { todo: Todo; onClose: () => void }) {
           <X size={12} />
         </button>
       </div>
-      {/* Full title */}
-      <div className="px-2 py-1 text-xs break-words" style={{ color: 'var(--fg)' }}>{todo.title}</div>
+      {/* Full title — preserve multiline (#2) */}
+      <div className="px-2 py-1 text-xs break-words whitespace-pre-wrap" style={{ color: 'var(--fg)' }}>{todo.title}</div>
       {/* Editable notes */}
       <textarea
         value={notes}
@@ -137,8 +137,16 @@ function TodoRow({ todo }: { todo: Todo }) {
       {/* left brand bar for active item */}
       <div className={`w-0.5 self-stretch rounded-full ${isActive ? 'bg-[var(--brand)]' : 'bg-transparent'}`} />
 
-      {/* visual drag affordance */}
-      <GripVertical size={14} className="text-[var(--fg-muted)] shrink-0" />
+      {/* #8: fold/expand indicator (not a drag handle — the whole row drags). Click toggles detail. */}
+      <button
+        onClick={(e) => { e.stopPropagation(); setDetailOpen(v => !v) }}
+        onPointerDown={e => e.stopPropagation()}
+        className="text-[var(--fg-muted)] hover:text-[var(--fg)] shrink-0"
+        aria-label={detailOpen ? 'Collapse' : 'Expand'}
+        data-no-drag
+      >
+        {detailOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      </button>
 
       {/* Title: click to edit, or truncate */}
       {editing ? (
@@ -273,13 +281,14 @@ export function TodoPanel({ edge }: { edge: string }) {
       {/* Add input */}
       <div className="flex items-center gap-1 px-2 py-1.5"
            style={{ borderTop: '1px solid var(--border)' }}>
-        <input
-          type="text"
+        <textarea
           value={newTitle}
           onChange={e => setNewTitle(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && addTodo()}
-          placeholder="Add todo…"
-          className="flex-1 text-xs outline-none px-2 py-1"
+          // #3: Enter sends, Shift+Enter inserts a newline (kept in the title; list shows line 1)
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addTodo() } }}
+          placeholder="Add todo…  (Shift+Enter = newline)"
+          rows={1}
+          className="flex-1 text-xs outline-none px-2 py-1 resize-none max-h-24"
           style={{
             background: 'var(--bg-solid)',
             color: 'var(--fg)',

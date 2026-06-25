@@ -113,7 +113,17 @@ export function createWindow(): BrowserWindow {
   })
 
   ipcMain.on('cat:content', (_e, rect: { x: number; y: number; w: number; h: number }) => {
-    if (rect && rect.w > 0 && rect.h > 0) latestCatRect = rect
+    if (rect && rect.w > 0 && rect.h > 0) {
+      latestCatRect = rect
+      // log the cat's live SCREEN rect (DIP) so a probe can locate it exactly before grabbing
+      if (!win.isDestroyed()) {
+        const [wx, wy] = win.getPosition()
+        dlog('cat:screen', {
+          x: Math.round(wx + rect.x), y: Math.round(wy + rect.y),
+          w: Math.round(rect.w), h: Math.round(rect.h)
+        })
+      }
+    }
   })
 
   ipcMain.on('drag:end', () => {
@@ -150,10 +160,15 @@ export function expandWindow(win: BrowserWindow): void {
       bx = wx; by = wy - PANEL_H; bw = WIN_W; bh = WIN_H + PANEL_H; break
   }
 
-  // ponytail: on-screen clamp so the panel is ALWAYS fully visible
+  // Clamp ONLY the perpendicular axis. The panel grows toward screen center (always on-screen),
+  // so the docked-edge axis must NOT be clamped — clamping it pulls the window (and the cat)
+  // inward off the edge = the "cat displaces on hover when docked" bug (#B).
   const wa = screen.getDisplayMatching(collapsedBounds).workArea
-  bx = clamp(bx, wa.x, wa.x + wa.width - bw)
-  by = clamp(by, wa.y, wa.y + wa.height - bh)
+  if (currentEdge === 'left' || currentEdge === 'right') {
+    by = clamp(by, wa.y, wa.y + wa.height - bh) // keep panel vertically on-screen; cat stays docked
+  } else {
+    bx = clamp(bx, wa.x, wa.x + wa.width - bw)
+  }
 
   currentlyExpanded = true
   win.setBounds({ x: Math.round(bx), y: Math.round(by), width: bw, height: bh })
