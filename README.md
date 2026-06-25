@@ -10,7 +10,7 @@
 |---|---|---|
 | 桌面框架 | **Electron + React + TS** | Windows 透明/always-on-top/click-through/tray 最成熟,桌面寵物範例最多 |
 | UI | **Tailwind + shadcn/ui + Lucide React** | 極簡暗色系,token 驅動 |
-| Avatar | **CC0 sprite sheet + CSS `steps()` 逐格動畫** | Kenney Mini Characters(CC0),0 渲染依賴、離主線程省電 |
+| Avatar | **暹羅貓 sprite + CSS `steps()` 逐格動畫** | 卡其奶白暹羅貓(可愛柔和、蜷起=毛球);CC0 貓重上色或自生,0 渲染依賴、離主線程省電 |
 | Claude 呼叫 | **`claude` CLI subprocess + `--session-id`** | 符合「思考」與自我開發迴圈需求,可 fork/注入 context |
 | 本地儲存 | **lowdb(JSON)於 userData** | 資料量小、好 parse、好版本化檢查 |
 

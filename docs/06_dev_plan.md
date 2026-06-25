@@ -4,7 +4,7 @@
 - Electron 30+ · electron-vite(Vite + HMR + TS,比 webpack boilerplate 輕) · React 18 · TypeScript
 - Tailwind + shadcn/ui + Lucide React · zustand(renderer 狀態,IPC 鏡像 main)
 - lowdb(儲存) · get-windows(前景偵測) · uuid
-- sprite:Kenney Mini Characters(CC0)→ CSS `steps()`
+- sprite:**暹羅貓**(卡其奶白)— CC0 貓 sheet 重新上色 或 AI 生成,Aseprite 清理 → CSS `steps()`(見 03)
 - 可借:`maotoumao/desktop-pet`(視窗 scaffold)、`WindowPet`(多狀態管理思路)
 
 ## 里程碑與執行順序
@@ -33,7 +33,8 @@ MVP = M0–M3。先把「能用的待辦精靈」做出來,再疊筆記本(M4)�
 | `--resume` 找不到 session(cwd 不一致) | 中 | thinking 固定一個 workdir;以 `--session-id` 自管 uuid |
 | 自動 thinking 花費失控 | 中 | per-session `--max-turns`+ 成本記錄 + 每日上限 + 開關 |
 | always-on-top 蓋住全螢幕應用惹惱 | 中 | hysteresis 降層 + 使用者隱藏優先 |
-| sprite 授權 | 低 | 只用 CC0(Kenney);記錄來源於 assets/CREDITS.md |
+| sprite 授權 | 低 | 用 CC0 貓重上色 或自生;來源記 assets/sprites/CREDITS.md |
+| 找不到貼切暹羅貓素材 | 中 | M2 先 CSS 佔位毛球跑通流程,正式 sheet 可後換;退路:AI 生成 + Aseprite |
 
 ## 目錄結構(實作後)
 ```

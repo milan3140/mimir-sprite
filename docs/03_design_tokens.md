@@ -79,5 +79,36 @@
 | 新增 | `Plus` | input 右 |
 | 隱藏 | `EyeOff` | panel 頂部 |
 
+## Avatar 形象規格(暹羅貓)
+精靈 = 一隻**暹羅貓**(或其意象:一顆蜷起來的毛球),可愛、柔和、卡其奶白。**唯一不走暗色極簡的視覺元素**,用自己的暖色調 pixel art。
+
+### 配色(Siamese palette,獨立於 `--hue`)
+```css
+--cat-cream:   hsl(36 38% 88%);   /* 身體主色:卡其奶白 */
+--cat-cream-sh:hsl(34 30% 78%);   /* 身體陰影 */
+--cat-point:   hsl(28 25% 42%);   /* 重點色:耳/臉罩/掌/尾(seal/chocolate brown) */
+--cat-point-sh:hsl(26 28% 30%);   /* 重點色陰影 */
+--cat-eye:     hsl(205 45% 62%);  /* 暹羅貓招牌藍眼 */
+--cat-nose:    hsl(8 35% 70%);    /* 鼻/內耳:灰粉 */
+--cat-outline: hsl(28 25% 22%);   /* 輪廓線(柔,不純黑) */
+```
+柔和原則:輪廓不用純黑、邊角圓潤、整體偏低彩度的暖奶茶色,避免高對比銳利感。
+
+### 動畫狀態(對應 sprite sheet)
+| 狀態 | 觸發 | 形象 |
+|---|---|---|
+| `idle` | 預設待機 | 坐姿/麵包貓(loaf),呼吸起伏 + 偶爾眨藍眼、甩尾 |
+| `furball` | 收合最小化 / 久未互動 | **蜷成一顆毛球**(招牌意象),極緩起伏 |
+| `working` | 有 active 項目 | 警醒坐姿、耳朵豎、尾尖微動(專注感) |
+| `talking` | 冒 bubble 時 | 耳朵前傾、嘴/鬍鬚微動,看向中心側 |
+| `resting`/`sleep` | 休息時刻 | 蜷睡毛球 + 飄 `Zzz` |
+面向:吸右緣→朝左、吸左緣→朝右(sprite 水平翻轉)。
+
+### 素材取得(更新)
+無現成「暹羅貓」CC0 sheet,兩條路(M2 決定,先列):
+1. **CC0 貓 sprite sheet → 重新上色成暹羅配色**(Aseprite 改 palette 到上方 7 色)。候選:OpenGameArt / itch.io 的 CC0「cat sprite」(含 idle/walk/sleep 的小貓)。
+2. **AI pixel-art 生成**(PixelLab / Retro Diffusion)產暹羅貓四狀態 → Aseprite 清理對齊。
+渲染照舊:CSS `steps()` + `image-rendering:pixelated`。來源與授權記到 `assets/sprites/CREDITS.md`。M2 開工時先做佔位 furball(純 CSS 畫一顆奶白圓球 + 藍眼 + 棕耳)讓流程跑通,再換正式 sheet。
+
 ## 60 秒自檢
 改 `--hue` 一處,全站換色且對比不爆;暗色下 `fg` 對 `bg` ≥ 7:1,`fg-muted` ≥ 4.5:1;icon-only 控制有 `aria-label` + tooltip。

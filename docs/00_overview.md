@@ -29,7 +29,7 @@
 - **M7**:cron 自我開發迴圈(D)。
 
 ## 名詞
-- **Avatar / 精靈**:畫面上會動的角色本體(唯一不走暗色極簡規範的視覺元素)。
+- **Avatar / 精靈**:畫面上會動的角色本體 = **暹羅貓**(卡其奶白、可愛柔和,蜷起來是一顆毛球)。唯一不走暗色極簡規範的視覺元素,配色與狀態見 [03](03_design_tokens.md#avatar-形象規格暹羅貓)。
 - **Panel**:hover 後展開的待辦清單面板。
 - **Bubble**:thinking 結果一句一個的對話框。
 - **Thinking session**:一次 Claude 規劃對話(對應一個 claude session id)。
