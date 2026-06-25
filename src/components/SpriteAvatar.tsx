@@ -3,20 +3,7 @@ import { useAppStore } from '../store/useAppStore'
 import { avatarSets, type AvatarState } from '../avatar/spriteConfig'
 import { getContentCellBox, type CellBox } from '../avatar/spriteBounds'
 
-declare global {
-  interface Window {
-    api: {
-      dragStart: (catScreenRect: { x: number; y: number; w: number; h: number }) => void
-      dragEnd: () => void
-      enterCat: () => void
-      leaveCat: () => void
-      sendCatRect: (rect: { x: number; y: number; w: number; h: number }) => void
-      sendCatContent: (rect: { x: number; y: number; w: number; h: number }) => void
-      onAnchorChanged: (cb: (edge: string) => void) => () => void
-      onAvatarChanged: (cb: (id: string) => void) => () => void
-    }
-  }
-}
+// Window.api types in src/global.d.ts
 
 export function SpriteAvatar() {
   // ref is on the INNER sprite (the actual cat), so drag + hit-test = the cat only,

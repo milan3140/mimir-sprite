@@ -1,10 +1,11 @@
 import { BrowserWindow, ipcMain, screen } from 'electron'
 import { dlog } from './debugLog'
+import { isExpanded } from './windowManager'
 
 /**
  * Click-through: transparent areas pass clicks to desktop.
- * Renderer sends cat-rect (the actual sprite, not the whole window), main polls cursor
- * every 120ms as fallback because Electron's mouseleave is unreliable after forward:true on Windows.
+ * When panel is expanded, the whole window is interactive (handled by windowManager).
+ * When collapsed, only the cat sprite is interactive.
  */
 export function setupClickThrough(win: BrowserWindow): void {
   win.setIgnoreMouseEvents(true, { forward: true })
@@ -14,9 +15,11 @@ export function setupClickThrough(win: BrowserWindow): void {
 
   const setInteractive = (next: boolean, src: string): void => {
     if (next === isInteractive) return
+    // ponytail: don't override when expanded — windowManager handles it
+    if (isExpanded()) return
     isInteractive = next
     win.setIgnoreMouseEvents(!next, next ? undefined : { forward: true })
-    dlog('clickthrough:toggle', { interactive: next, src, catRect })
+    dlog('clickthrough:toggle', { interactive: next, src })
   }
 
   ipcMain.on('cat:rect', (_e, rect: { x: number; y: number; w: number; h: number }) => {
@@ -25,9 +28,10 @@ export function setupClickThrough(win: BrowserWindow): void {
   ipcMain.on('mouse:enter-cat', () => setInteractive(true, 'enter-ipc'))
   ipcMain.on('mouse:leave-cat', () => setInteractive(false, 'leave-ipc'))
 
-  // cursor-polling fallback — Electron mouseleave breaks after forward:true on Win
+  // cursor-polling fallback
   setInterval(() => {
     if (win.isDestroyed() || !win.isVisible()) return
+    if (isExpanded()) return
     const cursor = screen.getCursorScreenPoint()
     const [wx, wy] = win.getPosition()
     const relX = cursor.x - wx

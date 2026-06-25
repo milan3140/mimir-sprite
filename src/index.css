@@ -64,3 +64,11 @@ html, body, #root {
 }
 
 /* ponytail: CSS blob removed — sprite sheet via SpriteAvatar now */
+
+/* Thin dark scrollbar for todo list */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Focus ring for add-todo input */
+input:focus { box-shadow: 0 0 0 1px var(--ring) !important; }
