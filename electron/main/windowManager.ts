@@ -54,15 +54,9 @@ export function createWindow(): BrowserWindow {
     dlog('win:created', { askedW: WIN_W, askedH: WIN_H, gotW: w, gotH: h, x, y })
   })
 
-  // --- Expand / Collapse ---
-  ipcMain.on('window:expand', () => {
-    if (win.isDestroyed() || currentlyExpanded) return
-    expandWindow(win)
-  })
-  ipcMain.on('window:collapse', () => {
-    if (win.isDestroyed() || !currentlyExpanded) return
-    collapseWindow(win)
-  })
+  // Expand/collapse is driven by the main-process cursor poll in clickThrough.ts —
+  // renderer mouseover/leave through a click-through, self-resizing window was unreliable
+  // (re-hover stuck, flicker-collapse, residual panel sliver). Main is the single authority.
 
   // --- Drag driven entirely from main via cursor polling (DPI-safe) ---
   let dragging = false
@@ -132,7 +126,8 @@ export function createWindow(): BrowserWindow {
 
 // --- Expand/Collapse: cat stays at its screen edge, panel grows toward center ---
 
-function expandWindow(win: BrowserWindow): void {
+export function expandWindow(win: BrowserWindow): void {
+  if (win.isDestroyed() || currentlyExpanded) return
   const [wx, wy] = win.getPosition()
   let nx = wx, ny = wy
   const dw = EXPANDED_W - WIN_W
@@ -147,12 +142,13 @@ function expandWindow(win: BrowserWindow): void {
 
   currentlyExpanded = true
   win.setBounds({ x: Math.round(nx), y: Math.round(ny), width: EXPANDED_W, height: EXPANDED_H })
-  // whole window interactive while panel is open
-  win.setIgnoreMouseEvents(false)
+  win.setIgnoreMouseEvents(false) // whole window interactive while panel is open
+  win.webContents.send('window:expanded', true) // renderer reflects this (it doesn't decide it)
   dlog('window:expand', { from: { x: wx, y: wy }, to: { x: nx, y: ny }, edge: currentEdge })
 }
 
-function collapseWindow(win: BrowserWindow): void {
+export function collapseWindow(win: BrowserWindow): void {
+  if (win.isDestroyed() || !currentlyExpanded) return
   const [wx, wy] = win.getPosition()
   let nx = wx, ny = wy
   const dw = EXPANDED_W - WIN_W
@@ -167,8 +163,8 @@ function collapseWindow(win: BrowserWindow): void {
 
   currentlyExpanded = false
   win.setBounds({ x: Math.round(nx), y: Math.round(ny), width: WIN_W, height: WIN_H })
-  // restore click-through
-  win.setIgnoreMouseEvents(true, { forward: true })
+  win.setIgnoreMouseEvents(true, { forward: true }) // restore click-through
+  win.webContents.send('window:expanded', false)
   dlog('window:collapse', { to: { x: nx, y: ny }, edge: currentEdge })
 }
 

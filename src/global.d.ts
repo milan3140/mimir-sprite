@@ -19,6 +19,7 @@ declare global {
       onAnchorChanged: (cb: (edge: string) => void) => () => void
       onAvatarChanged: (cb: (id: string) => void) => () => void
       onStoreChanged: (cb: (snap: StoreSnapshot) => void) => () => void
+      onExpandedChanged: (cb: (v: boolean) => void) => () => void
       // Todos
       todoList: () => Promise<Todo[]>
       todoAdd: (title: string) => Promise<Todo>
