@@ -85,12 +85,30 @@ export default function App() {
 
   // top/bottom: panel is wider than the cat and centred on it; pin the cat box to its true x via
   // catOffset (= catX - windowX from main) so the cat never moves. left/right: cat sits at the edge.
+  //
+  // HUG: the cat box (CAT_W/H) leaves wide transparent padding on the panel side (~64h / ~74v),
+  // so the panel card looks far from the visible cat. WITHOUT touching the flex sizing (cat stays
+  // fixed) and WITHOUT resizing the panel (width must stay consistent across edges), SHIFT the panel
+  // CARD ~50% of that gap toward the cat via an absolute layer (both opposite insets move by HUG, so
+  // size is unchanged). HUG < gap so the card never covers the cat; the freed space is on the panel's
+  // far (screen-centre) side and is transparent.
+  const HUG_X = 32  // ≈ 50% of the ~64px horizontal gap
+  const HUG_Y = 37  // ≈ 50% of the ~74px vertical gap
+  const panelShift = ({
+    right:  { left: HUG_X,  right: -HUG_X },
+    left:   { left: -HUG_X, right: HUG_X },
+    top:    { top: -HUG_Y,  bottom: HUG_Y },
+    bottom: { top: HUG_Y,   bottom: -HUG_Y },
+  } as const)[anchorEdge]
+
   return (
     <div className="w-screen h-screen overflow-hidden bg-transparent">
       <div className={`flex h-full ${flexDir}`}>
-        {/* ponytail: no padding — panel border is the gap; sits flush to the cat */}
-        <div className={`flex-1 min-w-0 min-h-0 ${slideAnim}`}>
-          <TodoPanel edge={anchorEdge} />
+        <div className="flex-1 min-w-0 min-h-0 relative">
+          {/* card shifted toward the cat (same size) so it sits ~half-as-far from it */}
+          <div className={`absolute inset-0 ${slideAnim}`} style={panelShift}>
+            <TodoPanel edge={anchorEdge} />
+          </div>
         </div>
         <div
           style={isHoriz

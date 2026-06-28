@@ -142,6 +142,7 @@ def main() -> int:
         wa = workarea()
         g.wait(1.0)
         panel_widths: dict[str, float] = {}
+        panel_gaps: dict[str, float] = {}
 
         targets = {
             "top":    g.to_physical(wa["x"] + wa["width"] // 2, wa["y"] + 25, scale),
@@ -207,6 +208,20 @@ def main() -> int:
                     panel_cx = b["x"] + b["w"] / 2
                     check(f"[{edge}] panel CENTRED on cat", abs(cat_cx - panel_cx) <= 10,
                           f"cat_cx={cat_cx:.0f} panel_cx={panel_cx:.0f} off={cat_cx - panel_cx:.0f}")
+            # ORACLE dimension #3 — HUG: gap between the panel's cat-facing edge and the visible cat
+            # must be small (the cat box used to leave ~64h/~74v of dead space). pr.panel = card rect.
+            pan = (pr or {}).get("panel") if isinstance(pr, dict) else None
+            cs2 = last_json("cat:screen")
+            if pan and cs2 and cs2.get("w") and cs2["w"] < 100:  # content rect (63), not the 150 box
+                if edge == "right":
+                    gap = cs2["x"] - (pan["x"] + pan["w"])
+                elif edge == "left":
+                    gap = pan["x"] - (cs2["x"] + cs2["w"])
+                elif edge == "bottom":
+                    gap = cs2["y"] - (pan["y"] + pan["h"])
+                else:  # top
+                    gap = pan["y"] - (cs2["y"] + cs2["h"])
+                panel_gaps[edge] = round(gap)
             shots.shot(f"{edge}_expanded")
 
             # move to the OPPOSITE edge -> definitely outside -> collapse
@@ -228,6 +243,16 @@ def main() -> int:
         else:
             check("panel width CONSISTENT across edges", False,
                   f"missing panel:rects for some edges: {panel_widths}")
+
+        # ORACLE dimension #3 — HUG: panel sits close to the visible cat on every edge (no big dead
+        # gap), and never overlaps it (gap >= 0). Was ~64-74px before the hug.
+        if len(panel_gaps) == 4:
+            check("panel HUGS cat (small gap, no overlap) all edges",
+                  all(0 <= gpx <= 45 for gpx in panel_gaps.values()),
+                  f"gaps={panel_gaps}")
+        else:
+            check("panel HUGS cat (small gap, no overlap) all edges", False,
+                  f"missing gap for some edges: {panel_gaps}")
 
         npass = sum(1 for _, ok, _ in results if ok)
         print(f"\n[SUITE] {npass}/{len(results)} passed")

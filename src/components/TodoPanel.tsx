@@ -194,6 +194,7 @@ function usePanelRects(panelRef: React.RefObject<HTMLDivElement | null>, expande
       // add-input
       const addInput = panel.querySelector('textarea[placeholder]') as HTMLElement | null
       const rects: Record<string, unknown> = {}
+      rects.panel = toScreen(panel.getBoundingClientRect()) // panel card outer rect (for gap checks)
       if (addInput) rects.addInput = toScreen(addInput.getBoundingClientRect())
       // rows + their buttons
       const rows: Record<string, unknown>[] = []
