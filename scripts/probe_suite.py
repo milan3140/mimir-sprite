@@ -196,6 +196,17 @@ def main() -> int:
             ai = (pr or {}).get("addInput") if isinstance(pr, dict) else None
             if ai and ai.get("w"):
                 panel_widths[edge] = ai["w"]
+            # ORACLE dimension #2 — POSITION: top/bottom panel must be CENTRED on the cat (the panel
+            # is full-window-width there, so panel centre == window centre). Catches the "shoved to
+            # one side" bug that width-consistency alone sailed past.
+            if edge in ("top", "bottom") and ev and "to" in ev:
+                b = norm_box(ev["to"])
+                cs = last_json("cat:screen")
+                if cs:
+                    cat_cx = cs["x"] + cs["w"] / 2
+                    panel_cx = b["x"] + b["w"] / 2
+                    check(f"[{edge}] panel CENTRED on cat", abs(cat_cx - panel_cx) <= 10,
+                          f"cat_cx={cat_cx:.0f} panel_cx={panel_cx:.0f} off={cat_cx - panel_cx:.0f}")
             shots.shot(f"{edge}_expanded")
 
             # move to the OPPOSITE edge -> definitely outside -> collapse

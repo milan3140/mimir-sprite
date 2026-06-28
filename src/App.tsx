@@ -47,7 +47,7 @@ export default function App() {
   const hiddenEdge = useAppStore(s => s.hiddenEdge)
   const setHiddenState = useAppStore(s => s.setHiddenState)
   const anchorEdge = useAppStore(s => s.anchorEdge)
-  const catSide = useAppStore(s => s.catSide)
+  const catOffset = useAppStore(s => s.catOffset)
   const applySnapshot = useAppStore(s => s.applySnapshot)
 
   useEffect(() => window.api.onStoreChanged(applySnapshot), [applySnapshot])
@@ -83,10 +83,8 @@ export default function App() {
     bottom:'panel-slide-bottom',
   } as const)[anchorEdge]
 
-  // top/bottom: the panel is wider than the cat, so align the cat box to its screen-half side
-  // (matches the window anchoring in expandWindow so the cat doesn't move). left/right: keep top.
-  const catAlign = isHoriz ? 'self-start' : (catSide === 'right' ? 'self-end' : 'self-start')
-
+  // top/bottom: panel is wider than the cat and centred on it; pin the cat box to its true x via
+  // catOffset (= catX - windowX from main) so the cat never moves. left/right: cat sits at the edge.
   return (
     <div className="w-screen h-screen overflow-hidden bg-transparent">
       <div className={`flex h-full ${flexDir}`}>
@@ -97,9 +95,9 @@ export default function App() {
         <div
           style={isHoriz
             ? { width: CAT_W, minWidth: CAT_W, height: CAT_H }
-            : { width: CAT_W, height: CAT_H, minHeight: CAT_H }
+            : { width: CAT_W, height: CAT_H, minHeight: CAT_H, marginLeft: catOffset }
           }
-          className={catAlign}
+          className="self-start"
         >
           <SpriteAvatar />
         </div>

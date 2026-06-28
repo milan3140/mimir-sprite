@@ -20,7 +20,7 @@ declare global {
       onAnchorChanged: (cb: (edge: string) => void) => () => void
       onAvatarChanged: (cb: (id: string) => void) => () => void
       onStoreChanged: (cb: (snap: StoreSnapshot) => void) => () => void
-      onExpandedChanged: (cb: (v: { expanded: boolean; edge: string; catSide?: 'left' | 'right' }) => void) => () => void
+      onExpandedChanged: (cb: (v: { expanded: boolean; edge: string; catOffset?: number }) => void) => () => void
       onHiddenChanged: (cb: (v: { hidden: boolean; edge: string }) => void) => () => void
       // Todos
       todoList: () => Promise<Todo[]>

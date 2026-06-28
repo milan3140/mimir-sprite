@@ -9,8 +9,8 @@ interface AppStore {
   avatarId: string
   setAvatarId: (id: string) => void
   expanded: boolean
-  catSide: 'left' | 'right'   // which side the cat sits on (top/bottom layout aligns the cat box to it)
-  setExpandedState: (v: { expanded: boolean; edge: string; catSide?: 'left' | 'right' }) => void
+  catOffset: number   // cat box's horizontal offset inside the expanded window (top/bottom layout)
+  setExpandedState: (v: { expanded: boolean; edge: string; catOffset?: number }) => void
   hidden: boolean
   hiddenEdge: Edge
   setHiddenState: (v: { hidden: boolean; edge: string }) => void
@@ -26,8 +26,8 @@ export const useAppStore = create<AppStore>((set) => ({
   avatarId: 'luizmelo',
   setAvatarId: (id) => set({ avatarId: id }),
   expanded: false,
-  catSide: 'left',
-  setExpandedState: (v) => set({ expanded: v.expanded, anchorEdge: v.edge as Edge, ...(v.catSide ? { catSide: v.catSide } : {}) }),
+  catOffset: 0,
+  setExpandedState: (v) => set({ expanded: v.expanded, anchorEdge: v.edge as Edge, ...(typeof v.catOffset === 'number' ? { catOffset: v.catOffset } : {}) }),
   hidden: false,
   hiddenEdge: 'right',
   setHiddenState: (v) => set({ hidden: v.hidden, hiddenEdge: v.edge as Edge }),
