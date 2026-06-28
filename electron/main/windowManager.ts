@@ -7,7 +7,7 @@ export type AnchorEdge = 'left' | 'right' | 'top' | 'bottom'
 // ponytail: collapsed = cat only; expanded = cat + panel
 export const WIN_W = 190
 export const WIN_H = 190
-const PANEL_W = 200
+const PANEL_W = 267   // +1/3 wider (was 200); todo rows/input are flex/w-full so content scales with it
 const PANEL_H = 360
 
 // When hidden, the sprite is replaced by two cat ears (Cat-1-Peek) whose bases sit flush on the
