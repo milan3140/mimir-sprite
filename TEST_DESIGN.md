@@ -60,3 +60,21 @@ cell must map to an automated probe assertion or be explicitly marked UNCOVERED.
   4. F7 detail × long-content × edge (rows push + scroll, panel stays on-screen).
 
 Probes live in `scripts/` and reuse `2_Toolkit/Harness/gui_visual_probe`. Run on Opus.
+
+## 5. Transition × invariant oracle (added after the grab-flash miss)
+
+A flicker/flash is a TRANSITION defect. The oracle must assert the no-flicker invariant on EVERY
+user-facing transition — including ones used only as test scaffolding (grab/drag), which are the most
+likely to be left unasserted. Dynamic invariant = "no native setBounds resize/move that desyncs from
+the renderer" (proxy for the 1-frame flash a log probe can't perceive).
+
+| Transition | assertion | Probe | Status |
+|---|---|---|---|
+| hover-expand   | docked bounds == expand bounds | `expand NO-resize` | OK |
+| hover-collapse | no setBounds on collapse | (collapse logs no bounds) | OK implicit |
+| grab/drag-start | drag window size > 190 (not shrunk) | `grab NO-resize` | OK (was the MISS) |
+| snap (dock) | deliberate animated motion - resize allowed | `snapped` | OK intended |
+| hide / restore | resize allowed (deliberate) | probe_nub | OK |
+
+Rule: when adding/altering ANY transition, add its row + assertion here BEFORE coding. "This resize
+is invisible" is an assumption -> must become an assertion, never a code comment.
