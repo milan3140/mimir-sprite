@@ -106,17 +106,20 @@ export function createWindow(): BrowserWindow {
         return
       }
       const c = screen.getCursorScreenPoint()
-      const rawX = c.x - dragOffset.x
-      const rawY = c.y - dragOffset.y
-      const { x: nx, y: ny, clamped } = clampToDisplay(c, rawX, rawY, WIN_W, WIN_H)
+      const nx = Math.round(c.x - dragOffset.x)
+      const ny = Math.round(c.y - dragOffset.y)
       if (!Number.isFinite(nx) || !Number.isFinite(ny)) return
+      // NO clamp during drag: the docked window legitimately hangs off-screen (cat content flush to
+      // the edge, transparent margin past it). Clamping it on-screen at grab made the cat jump
+      // forward for a frame before catching up to the cursor. The cursor is always on-screen and the
+      // cat sits at a fixed offset from it, so the cat is never lost.
       win.setBounds({ x: nx, y: ny, width: WIN_W, height: WIN_H })
       pollCount++
-      if (clamped || pollCount % 12 === 0) {
+      if (pollCount % 12 === 0) {
         const [ax, ay] = win.getPosition()
         const [sw, sh] = win.getSize()
         dlog('drag:move', {
-          cursor: c, set: { x: nx, y: ny }, actual: { x: ax, y: ay }, size: { w: sw, h: sh }, clamped
+          cursor: c, set: { x: nx, y: ny }, actual: { x: ax, y: ay }, size: { w: sw, h: sh }
         })
       }
     }, 16)
@@ -339,15 +342,6 @@ function snapToNearestEdge(win: BrowserWindow): void {
       if (!win.isDestroyed()) win.webContents.send('anchor:changed', edge)
     }
   }, 16)
-}
-
-function clampToDisplay(
-  point: { x: number; y: number }, x: number, y: number, w: number, h: number
-): { x: number; y: number; clamped: boolean } {
-  const b = screen.getDisplayNearestPoint(point).bounds
-  const cx = Math.round(clamp(x, b.x, b.x + b.width - w))
-  const cy = Math.round(clamp(y, b.y, b.y + b.height - h))
-  return { x: cx, y: cy, clamped: cx !== Math.round(x) || cy !== Math.round(y) }
 }
 
 function clamp(v: number, min: number, max: number): number {

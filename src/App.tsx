@@ -5,6 +5,8 @@ import { useAppStore } from './store/useAppStore'
 
 const CAT_W = 190 // must match WIN_W in windowManager
 const CAT_H = 190 // must match WIN_H in windowManager
+const PANEL_W = 267 // must match PANEL_W in windowManager
+const PANEL_H = 360 // must match PANEL_H in windowManager
 // ear-strip dims — must match EAR_W/EAR_D in windowManager (aspect ≈ Cat-1-Peek 30:13 to avoid stretch)
 const EAR_W = 70
 const EAR_D = 30
@@ -62,20 +64,6 @@ export default function App() {
     </div>
   )
 
-  if (!expanded) return (
-    <div className="w-screen h-screen overflow-hidden bg-transparent">
-      <SpriteAvatar />
-    </div>
-  )
-
-  const isHoriz = anchorEdge === 'left' || anchorEdge === 'right'
-  const flexDir = ({
-    right: 'flex-row',
-    left:  'flex-row-reverse',
-    top:   'flex-col-reverse',
-    bottom:'flex-col',
-  } as const)[anchorEdge]
-
   const slideAnim = ({
     right: 'panel-slide-right',
     left:  'panel-slide-left',
@@ -83,42 +71,40 @@ export default function App() {
     bottom:'panel-slide-bottom',
   } as const)[anchorEdge]
 
-  // top/bottom: panel is wider than the cat and centred on it; pin the cat box to its true x via
-  // catOffset (= catX - windowX from main) so the cat never moves. left/right: cat sits at the edge.
-  //
-  // HUG: the cat box (CAT_W/H) leaves wide transparent padding on the panel side (~64h / ~74v),
-  // so the panel card looks far from the visible cat. WITHOUT touching the flex sizing (cat stays
-  // fixed) and WITHOUT resizing the panel (width must stay consistent across edges), SHIFT the panel
-  // CARD ~50% of that gap toward the cat via an absolute layer (both opposite insets move by HUG, so
-  // size is unchanged). HUG < gap so the card never covers the cat; the freed space is on the panel's
-  // far (screen-centre) side and is transparent.
-  const HUG_X = 32  // ≈ 50% of the ~64px horizontal gap
-  const HUG_Y = 37  // ≈ 50% of the ~74px vertical gap
-  const panelShift = ({
-    right:  { left: HUG_X,  right: -HUG_X },
-    left:   { left: -HUG_X, right: HUG_X },
-    top:    { top: -HUG_Y,  bottom: HUG_Y },
-    bottom: { top: HUG_Y,   bottom: -HUG_Y },
-  } as const)[anchorEdge]
+  // HUG: ~50% of the cat box's transparent padding on the panel side (~64h / ~74v) — pulls the
+  // panel toward the visible cat so it doesn't look far away.
+  const HUG_X = 32
+  const HUG_Y = 37
+
+  // UNIFIED LAYOUT (collapsed + expanded share one tree → no React-tree switch, so the cat never
+  // flashes during the window resize). The cat box is ABSOLUTELY anchored to the docked edge, whose
+  // screen position is fixed across expand/collapse (the panel grows toward centre, the docked edge
+  // stays put), so resizing the window cannot move the cat. The panel is an absolute layer rendered
+  // only when expanded; for top/bottom the cat box uses catOffset (its true x inside the window).
+  const catBoxStyle = ({
+    right:  { position: 'absolute', right: 0, top: 0, width: CAT_W, height: CAT_H },
+    left:   { position: 'absolute', left: 0,  top: 0, width: CAT_W, height: CAT_H },
+    top:    { position: 'absolute', top: 0,    left: expanded ? catOffset : 0, width: CAT_W, height: CAT_H },
+    bottom: { position: 'absolute', bottom: 0, left: expanded ? catOffset : 0, width: CAT_W, height: CAT_H },
+  })[anchorEdge] as React.CSSProperties
+
+  // panel area (absolute), shifted ~HUG toward the cat to hug it; PANEL_W×PANEL_H content on every edge
+  const panelStyle = ({
+    right:  { position: 'absolute', left: HUG_X,        top: 0, bottom: 0, width: PANEL_W },
+    left:   { position: 'absolute', right: HUG_X,       top: 0, bottom: 0, width: PANEL_W },
+    top:    { position: 'absolute', top: CAT_H - HUG_Y, left: 0, right: 0, height: PANEL_H },
+    bottom: { position: 'absolute', top: HUG_Y,         left: 0, right: 0, height: PANEL_H },
+  })[anchorEdge] as React.CSSProperties
 
   return (
-    <div className="w-screen h-screen overflow-hidden bg-transparent">
-      <div className={`flex h-full ${flexDir}`}>
-        <div className="flex-1 min-w-0 min-h-0 relative">
-          {/* card shifted toward the cat (same size) so it sits ~half-as-far from it */}
-          <div className={`absolute inset-0 ${slideAnim}`} style={panelShift}>
-            <TodoPanel edge={anchorEdge} />
-          </div>
+    <div className="w-screen h-screen overflow-hidden bg-transparent relative">
+      {expanded && (
+        <div className={slideAnim} style={panelStyle}>
+          <TodoPanel edge={anchorEdge} />
         </div>
-        <div
-          style={isHoriz
-            ? { width: CAT_W, minWidth: CAT_W, height: CAT_H }
-            : { width: CAT_W, height: CAT_H, minHeight: CAT_H, marginLeft: catOffset }
-          }
-          className="self-start"
-        >
-          <SpriteAvatar />
-        </div>
+      )}
+      <div style={catBoxStyle}>
+        <SpriteAvatar />
       </div>
     </div>
   )
