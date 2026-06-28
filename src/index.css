@@ -84,9 +84,9 @@ input:focus { box-shadow: 0 0 0 1px var(--ring) !important; }
 .panel-slide-top    { animation: slide-from-top    140ms var(--ease) both; }
 .panel-slide-bottom { animation: slide-from-bottom 140ms var(--ease) both; }
 
-/* ponytail: recall nub — gentle attention pulse so a stranger notices it's clickable */
-@keyframes nub-pulse {
-  0%, 100% { filter: brightness(0.92); }
-  50%      { filter: brightness(1.18); }
+/* ponytail: hidden cat peek — gentle bob so the poking-out ears look alive + draw the eye */
+@keyframes cat-peek-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
 }
-.nub-pulse { animation: nub-pulse 1.7s ease-in-out infinite; }
+.cat-peek-bob { animation: cat-peek-bob 1.8s ease-in-out infinite; }

@@ -8,3 +8,9 @@ _devout.txt
 _probe_shots/
 state/
 _probe_shots/
+
+# throwaway probe/audit screenshots
+_*_shots*/
+_audit/
+_probe_shots/
+scripts/_*.png

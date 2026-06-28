@@ -10,8 +10,11 @@ export const WIN_H = 190
 const PANEL_W = 200
 const PANEL_H = 360
 
-const NUB_W = 18  // nub thickness (protrusion from edge) — prominent enough for a stranger to spot
-const NUB_H = 76  // nub length along the edge
+// When hidden, the sprite is replaced by a dedicated "cat ears peeking" face (Cat-1-Peek) at the
+// docked screen edge. Clicking it restores the sprite. These dims must match CatPeek in App.tsx.
+const FACE_W = 74  // peek face width  (top/bottom: full face shows)
+const FACE_H = 48  // peek face height
+const SIDE_W = 42  // side edges: how wide a slice of the upright face peeks around the vertical edge
 
 let currentlyExpanded = false
 let currentEdge: AnchorEdge = 'right'
@@ -201,35 +204,34 @@ export function hideToNub(win: BrowserWindow): void {
   preHideBounds = dockedBounds ?? win.getBounds()
   const { x: wx, y: wy } = preHideBounds
 
-  // The docked window hangs PARTLY OFF-SCREEN (cat's visible pixels are flush to the edge, the
-  // transparent margin spills past it). So anchoring the nub to the WINDOW bounds put it in the
-  // off-screen margin → invisible. Anchor to the SCREEN workArea edge instead, centred on the
-  // cat's visible content.
+  // The peek face sits flush at the SCREEN workArea edge (the docked window itself hangs partly
+  // off-screen, so we anchor to the screen, not the window bounds), centred where the cat was.
+  // top/bottom show the whole face; left/right show a vertical slice peeking around the edge.
   const wa = screen.getDisplayMatching(preHideBounds).workArea
   const cr = latestCatRect.w > 0 && latestCatRect.h > 0
     ? latestCatRect : { x: 0, y: 0, w: WIN_W, h: WIN_H }
-  const catCx = wx + cr.x + cr.w / 2
-  const catCy = wy + cr.y + cr.h / 2
+  const ccx = wx + cr.x + cr.w / 2      // cat content centre x (screen)
+  const ccy = wy + cr.y + cr.h / 2      // cat content centre y (screen)
 
   let nx = 0, ny = 0, nw = 0, nh = 0
   switch (currentEdge) {
-    case 'left':
-      nw = NUB_W; nh = NUB_H
-      nx = wa.x; ny = clamp(Math.round(catCy - nh / 2), wa.y, wa.y + wa.height - nh); break
-    case 'right':
-      nw = NUB_W; nh = NUB_H
-      nx = wa.x + wa.width - nw; ny = clamp(Math.round(catCy - nh / 2), wa.y, wa.y + wa.height - nh); break
-    case 'top':
-      nw = NUB_H; nh = NUB_W
-      ny = wa.y; nx = clamp(Math.round(catCx - nw / 2), wa.x, wa.x + wa.width - nw); break
     case 'bottom':
-      nw = NUB_H; nh = NUB_W
-      ny = wa.y + wa.height - nh; nx = clamp(Math.round(catCx - nw / 2), wa.x, wa.x + wa.width - nw); break
+      nw = FACE_W; nh = FACE_H
+      nx = clamp(Math.round(ccx - FACE_W / 2), wa.x, wa.x + wa.width - nw); ny = wa.y + wa.height - FACE_H; break
+    case 'top':
+      nw = FACE_W; nh = FACE_H
+      nx = clamp(Math.round(ccx - FACE_W / 2), wa.x, wa.x + wa.width - nw); ny = wa.y; break
+    case 'left':
+      nw = SIDE_W; nh = FACE_H
+      nx = wa.x; ny = clamp(Math.round(ccy - FACE_H / 2), wa.y, wa.y + wa.height - nh); break
+    case 'right':
+      nw = SIDE_W; nh = FACE_H
+      nx = wa.x + wa.width - SIDE_W; ny = clamp(Math.round(ccy - FACE_H / 2), wa.y, wa.y + wa.height - nh); break
   }
 
   hidden = true
   win.setBounds({ x: nx, y: ny, width: nw, height: nh })
-  win.setIgnoreMouseEvents(false) // nub fully clickable
+  win.setIgnoreMouseEvents(false) // peek strip fully clickable (click to restore)
   win.webContents.send('window:hidden', { hidden: true, edge: currentEdge })
   dlog('window:hideToNub', { preHideBounds, nub: { x: nx, y: ny, w: nw, h: nh }, edge: currentEdge, wa })
 }

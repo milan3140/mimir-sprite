@@ -2,36 +2,40 @@ import { useEffect } from 'react'
 import { SpriteAvatar } from './components/SpriteAvatar'
 import { TodoPanel } from './components/TodoPanel'
 import { useAppStore } from './store/useAppStore'
-import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react'
 
 const CAT_W = 190 // must match WIN_W in windowManager
 const CAT_H = 190 // must match WIN_H in windowManager
+// peek-face dims — must match FACE_W/FACE_H/SIDE_W in windowManager
+const FACE_W = 74
+const FACE_H = 48
+const SIDE_W = 42
+const peekImg = new URL('../assets/sprites/luizmelo/siamese/Cat-1-Peek.png', import.meta.url).href
 
-// ponytail: tiny clickable tab at the docked edge when hidden
-function Nub({ edge }: { edge: string }) {
+// When hidden, the window is a small strip at the docked screen edge showing a dedicated
+// "cat ears peeking" face. Click it to restore. top/bottom show the whole face; left/right show a
+// vertical slice peeking around the edge (the face's bottom is the "ledge" it peeks over).
+function CatPeek({ edge }: { edge: string }) {
   const e = (edge as 'left' | 'right' | 'top' | 'bottom') ?? 'right'
-  // chevron points AWAY from the edge (the direction the sprite pops back out)
-  const Chevron = ({ right: ChevronLeft, left: ChevronRight, top: ChevronDown, bottom: ChevronUp } as const)[e]
-  // flat side hugs the screen edge; round the inner side only
-  const radius = ({
-    left:   '0 11px 11px 0',
-    right:  '11px 0 0 11px',
-    top:    '0 0 11px 11px',
-    bottom: '11px 11px 0 0',
-  } as const)[e]
+  // face fills FACE_W×FACE_H; the strip window crops it per edge (overflow hidden)
+  const face: React.CSSProperties = {
+    position: 'absolute', width: FACE_W, height: FACE_H, imageRendering: 'pixelated',
+    backgroundImage: `url("${peekImg}")`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat',
+  }
+  switch (e) {
+    case 'bottom': face.left = 0;             face.top = 0; break                       // whole face, ledge at bottom
+    case 'top':    face.left = 0;             face.top = 0; face.transform = 'scaleY(-1)'; break // flipped, ledge at top
+    case 'left':   face.left = SIDE_W - FACE_W; face.top = 0; break                     // right slice peeks in
+    case 'right':  face.left = 0;             face.top = 0; break                       // left slice peeks in
+  }
 
   return (
     <div
-      className="w-full h-full flex items-center justify-center cursor-pointer nub-pulse"
-      style={{
-        background: 'var(--brand)',
-        borderRadius: radius,
-        boxShadow: '0 2px 10px hsl(var(--hue) 40% 3% / 0.5)'
-      }}
+      className="relative w-full h-full overflow-hidden cursor-pointer cat-peek-bob"
+      style={{ background: 'transparent' }}
       onClick={() => window.api.windowRestore()}
       title="Click to show Mimir (Ctrl+Alt+Space)"
     >
-      <Chevron size={15} strokeWidth={2.75} style={{ color: 'white' }} />
+      <div style={face} />
     </div>
   )
 }
@@ -53,7 +57,7 @@ export default function App() {
   // ponytail: nub mode — tiny tab, nothing else
   if (hidden) return (
     <div className="w-screen h-screen overflow-hidden bg-transparent">
-      <Nub edge={hiddenEdge} />
+      <CatPeek edge={hiddenEdge} />
     </div>
   )
 
