@@ -156,7 +156,15 @@ export function expandWindow(win: BrowserWindow): void {
   if (win.isDestroyed() || currentlyExpanded || snapping || dragging || hidden) return
   collapsedBounds = dockedBounds ?? win.getBounds()
   const { x: wx, y: wy } = collapsedBounds
+  const wa = screen.getDisplayMatching(collapsedBounds).workArea
 
+  // The panel content area must be PANEL_W × PANEL_H on EVERY edge (consistent usable width).
+  // left/right: window = WIN_W + PANEL_W wide, panel beside the cat.
+  // top/bottom: window = PANEL_W wide (NOT WIN_W — that gave a too-narrow panel), panel above/below.
+  // To keep the cat fixed (no displacement) while the panel is wider than the cat, anchor the panel
+  // to the cat's screen-half: cat on the left half → panel extends right (cat at window-left);
+  // cat on the right half → panel extends left (cat at window-right).
+  const catLeft = (wx + WIN_W / 2) < (wa.x + wa.width / 2)
   let bx: number, by: number, bw: number, bh: number
   switch (currentEdge) {
     case 'right':
@@ -164,26 +172,26 @@ export function expandWindow(win: BrowserWindow): void {
     case 'left':
       bx = wx; by = wy; bw = WIN_W + PANEL_W; bh = PANEL_H; break
     case 'top':
-      bx = wx; by = wy; bw = WIN_W; bh = WIN_H + PANEL_H; break
+      bw = PANEL_W; bh = WIN_H + PANEL_H; by = wy; bx = catLeft ? wx : wx + WIN_W - PANEL_W; break
     case 'bottom':
-      bx = wx; by = wy - PANEL_H; bw = WIN_W; bh = WIN_H + PANEL_H; break
+      bw = PANEL_W; bh = WIN_H + PANEL_H; by = wy - PANEL_H; bx = catLeft ? wx : wx + WIN_W - PANEL_W; break
   }
 
-  // Clamp ONLY the perpendicular axis. The panel grows toward screen center (always on-screen),
-  // so the docked-edge axis must NOT be clamped — clamping it pulls the window (and the cat)
-  // inward off the edge = the "cat displaces on hover when docked" bug (#B).
-  const wa = screen.getDisplayMatching(collapsedBounds).workArea
+  // Clamp ONLY the axis the panel grows along (always toward center → on-screen). The docked-edge
+  // axis must NOT be clamped — clamping it pulls the window (and cat) off the edge (#B displacement).
   if (currentEdge === 'left' || currentEdge === 'right') {
     by = clamp(by, wa.y, wa.y + wa.height - bh) // keep panel vertically on-screen; cat stays docked
   } else {
-    bx = clamp(bx, wa.x, wa.x + wa.width - bw)
+    bx = clamp(bx, wa.x, wa.x + wa.width - bw)  // panel chosen by screen-half already fits; defensive
   }
 
+  // tell the renderer which side the cat sits on (top/bottom layout aligns the cat box to it)
+  const catSide: 'left' | 'right' = catLeft ? 'left' : 'right'
   currentlyExpanded = true
   win.setBounds({ x: Math.round(bx), y: Math.round(by), width: bw, height: bh })
   win.setIgnoreMouseEvents(false)
-  win.webContents.send('window:expanded', { expanded: true, edge: currentEdge })
-  dlog('window:expand', { from: collapsedBounds, to: { x: bx, y: by, w: bw, h: bh }, edge: currentEdge })
+  win.webContents.send('window:expanded', { expanded: true, edge: currentEdge, catSide })
+  dlog('window:expand', { from: collapsedBounds, to: { x: bx, y: by, w: bw, h: bh }, edge: currentEdge, catSide })
 }
 
 export function collapseWindow(win: BrowserWindow): void {

@@ -141,6 +141,7 @@ def main() -> int:
             return 1
         wa = workarea()
         g.wait(1.0)
+        panel_widths: dict[str, float] = {}
 
         targets = {
             "top":    g.to_physical(wa["x"] + wa["width"] // 2, wa["y"] + 25, scale),
@@ -189,7 +190,12 @@ def main() -> int:
             if ev and "to" in ev:
                 b = norm_box(ev["to"])
                 check(f"[{edge}] panel ON-SCREEN", inside(b, wa, edge), f"to={b}")
-            g.wait(0.4)
+            g.wait(0.6)  # let panel:rects emit (400ms interval) for the width-consistency check
+            # GOAL check (not just on-screen): capture the real rendered panel width on this edge.
+            pr = last_json("panel:rects")
+            ai = (pr or {}).get("addInput") if isinstance(pr, dict) else None
+            if ai and ai.get("w"):
+                panel_widths[edge] = ai["w"]
             shots.shot(f"{edge}_expanded")
 
             # move to the OPPOSITE edge -> definitely outside -> collapse
@@ -199,6 +205,18 @@ def main() -> int:
             cev = wait_new("window:collapse", col_prev, timeout=4)
             check(f"[{edge}] collapses", bool(cev))
             g.wait(0.3)
+
+        # GOAL: the panel must be EQUALLY usable on every edge — assert its rendered width is
+        # consistent across all 4 docked edges (catches the "top/bottom panel too narrow" bug that
+        # a mere on-screen check sailed past).
+        if len(panel_widths) == 4:
+            ws = list(panel_widths.values())
+            spread = max(ws) - min(ws)
+            check("panel width CONSISTENT across edges", spread <= 16,
+                  f"widths={panel_widths} spread={spread}px")
+        else:
+            check("panel width CONSISTENT across edges", False,
+                  f"missing panel:rects for some edges: {panel_widths}")
 
         npass = sum(1 for _, ok, _ in results if ok)
         print(f"\n[SUITE] {npass}/{len(results)} passed")
