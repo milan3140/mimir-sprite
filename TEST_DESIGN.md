@@ -78,3 +78,40 @@ the renderer" (proxy for the 1-frame flash a log probe can't perceive).
 
 Rule: when adding/altering ANY transition, add its row + assertion here BEFORE coding. "This resize
 is invisible" is an assumption -> must become an assertion, never a code comment.
+
+**MISS #2 (snap teleport + not-flush, found by the user, NOT the suite):** the row above marked snap
+"OK intended" — that exemption was the blind spot. `snapped` only checked `snap:done.edge`, reading
+`cat:screen` which main *computes* (`tx+sc.x`). The oracle lived entirely in **main's self-report**, so
+it could not see (a) the cat TELEPORTING 557px mid-snap (renderer re-anchored to the new edge while the
+window was still at the drag position) nor (b) the cat docking 59px OFF the edge (sc captured the wrong
+150×150 box at boot). Both are main↔renderer desyncs — invisible to any log-only oracle by construction.
+Fix: `probe_snap_visual.py` measures the cat's REAL drawn pixels (mss burst + bg-diff): trajectory must
+be smooth (bounded per-frame jump, no backtrack) and the settled cat must be flush (gap ≈ 0).
+
+## 6. L2 CONTRACT — unified fixed-window, cat-glued model (architecture rework after MISS #2)
+
+The flicker/desync class failed 3×: hover-flicker → grab-flash → snap-teleport. Root: the cat's screen
+position was co-owned by main (window bounds) and renderer (per-edge anchor + `catOffset`), updated on
+different clocks; every edge change had to mutate both atomically across IPC — impossible. Escalation
+rule → fix the architecture.
+
+**State owners / who must agree:**
+- main owns the WINDOW BOUNDS (a single fixed size on all edges) and moves it.
+- renderer owns LAYOUT, but the **cat cell is at a CONSTANT window position on every edge**
+  (`CAT_X,CAT_Y`); only the PANEL repositions per edge, and only while collapsed (invisible).
+- They agree on the cat's screen position **trivially**, because the cat's window-relative position
+  never changes — the cat is rigidly glued to the window. Moving the window moves the cat, in sync.
+
+**Invariants (oracle — static AND dynamic, each checkable):**
+1. static — settled cat content is FLUSH to the docked edge (gap −6..16px), all 4 edges. (`probe_snap_visual` gap)
+2. static — panel width consistent (±16) + centred on cat (±10, top/bottom) + hugging (gap 0..45). (`probe_suite`)
+3. dynamic — snap motion is SMOOTH: cat centroid moves monotonically to the dock, no teleport
+   (per-frame jump < ~140px, backtrack < ~90px). (`probe_snap_visual` SMOOTH)
+4. dynamic — NO native `setBounds` resize on hover expand/collapse; NO resize on grab. (`probe_suite`)
+5. dynamic — snap RESIZES NEVER (window is one fixed size always); snap only MOVES. (new assertion)
+
+**Architectural red lines (never-do):**
+- Never re-anchor / change the cat's window-relative position during a transition.
+- Never change the window SIZE (it is one fixed size for all edges/states); only MOVE it.
+- The cat's flush content box (`spriteContentBox`) must come from a TIGHT (cellBox-ready) report,
+  never the boot fallback full render box.

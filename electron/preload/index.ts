@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('api', {
   leaveCat: () => ipcRenderer.send('mouse:leave-cat'),
   sendCatRect: (rect: { x: number; y: number; w: number; h: number }) =>
     ipcRenderer.send('cat:rect', rect),
-  sendCatContent: (rect: { x: number; y: number; w: number; h: number }) =>
+  sendCatContent: (rect: { x: number; y: number; w: number; h: number; tight?: boolean }) =>
     ipcRenderer.send('cat:content', rect),
 
   // Window expand/collapse

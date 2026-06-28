@@ -20,12 +20,15 @@ export function SpriteAvatar() {
   const { tileW, tileH, scale } = avatar
   const flipX = anchorEdge !== 'left'
 
-  // Visible-pixel bbox of the cat within a cell (union over frames), so snap can flush the
-  // real cat pixels to the edge regardless of the sprite's transparent padding.
+  // Visible-pixel bbox of the cat within a cell, used so snap can flush the real cat pixels to the
+  // edge. Use the RESTING frame (frames[0]) only — a union over all idle frames is wider than the
+  // resting pose, which left the docked cat inset by up to ~19px (the animation's reach). Flushing
+  // the resting silhouette plants the cat on the edge; the occasional wider idle frame just brushes it.
   const [cellBox, setCellBox] = useState<CellBox | null>(null)
   useEffect(() => {
     let alive = true
-    getContentCellBox(state.image, state.frames, tileW, tileH).then((b) => { if (alive) setCellBox(b) })
+    const restFrame = state.frames.length ? [state.frames[0]] : state.frames
+    getContentCellBox(state.image, restFrame, tileW, tileH).then((b) => { if (alive) setCellBox(b) })
     return () => { alive = false }
   }, [state.image, state.frames, tileW, tileH])
 
@@ -41,9 +44,11 @@ export function SpriteAvatar() {
       const hpx = (cellBox.b - cellBox.t) * scale
       // flip mirrors the content horizontally within the render box
       const leftInBox = flipX ? (tileW - cellBox.r) * scale : cellBox.l * scale
-      window.api.sendCatContent({ x: r.x + leftInBox, y: r.y + cellBox.t * scale, w: wpx, h: hpx })
+      // `tight: true` = this is the real visible-pixel box; main captures spriteContentBox ONLY from a
+      // tight report (the boot fallback below is the full render box → caused the not-flush-by-54px bug).
+      window.api.sendCatContent({ x: r.x + leftInBox, y: r.y + cellBox.t * scale, w: wpx, h: hpx, tight: true })
     } else {
-      window.api.sendCatContent({ x: r.x, y: r.y, w: r.width, h: r.height })
+      window.api.sendCatContent({ x: r.x, y: r.y, w: r.width, h: r.height, tight: false })
     }
   }, [cellBox, scale, tileW, flipX])
 

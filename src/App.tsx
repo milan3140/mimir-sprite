@@ -3,10 +3,14 @@ import { SpriteAvatar } from './components/SpriteAvatar'
 import { TodoPanel } from './components/TodoPanel'
 import { useAppStore } from './store/useAppStore'
 
-const CAT_W = 190 // must match WIN_W in windowManager
-const CAT_H = 190 // must match WIN_H in windowManager
-const PANEL_W = 267 // must match PANEL_W in windowManager
-const PANEL_H = 360 // must match PANEL_H in windowManager
+// UNIFIED FIXED-WINDOW, CAT-GLUED MODEL (see TEST_DESIGN.md §6). The window is ONE fixed size and the
+// cat cell sits at a CONSTANT position (CAT_X, CAT_Y) on every edge — only the panel moves per edge.
+// These MUST match windowManager.ts.
+const CELL = 190           // cat cell
+const PANEL_W = 267
+const PANEL_H = 360
+const CAT_X = PANEL_W      // cat cell x inside the window (267)
+const CAT_Y = PANEL_H      // cat cell y inside the window (360)
 // ear-strip dims — must match EAR_W/EAR_D in windowManager (aspect ≈ Cat-1-Peek 30:13 to avoid stretch)
 const EAR_W = 70
 const EAR_D = 30
@@ -49,7 +53,6 @@ export default function App() {
   const hiddenEdge = useAppStore(s => s.hiddenEdge)
   const setHiddenState = useAppStore(s => s.setHiddenState)
   const anchorEdge = useAppStore(s => s.anchorEdge)
-  const catOffset = useAppStore(s => s.catOffset)
   const applySnapshot = useAppStore(s => s.applySnapshot)
 
   useEffect(() => window.api.onStoreChanged(applySnapshot), [applySnapshot])
@@ -64,30 +67,25 @@ export default function App() {
     </div>
   )
 
-  // HUG: ~50% of the cat box's transparent padding on the panel side (~64h / ~74v) — pulls the
-  // panel toward the visible cat so it doesn't look far away.
+  // HUG: pull the panel toward the visible cat (must match windowManager HUG_X/HUG_Y).
   const HUG_X = 32
   const HUG_Y = 37
 
-  // FIXED-WINDOW MODEL (flicker-free): while docked the window is ALWAYS the expanded size — the cat
-  // box is absolutely anchored to the docked edge (flush) and the panel is ALWAYS MOUNTED. Expand/
-  // collapse never resizes the window; it just toggles `.is-open`, and the panel animates open via a
-  // GPU transform+opacity transition with transform-origin at the cat. No native resize on the hover
-  // path → no native-vs-renderer frame mismatch → no flicker/deform. (Research-validated approach.)
-  const catBoxStyle = ({
-    right:  { position: 'absolute', right: 0, top: 0, width: CAT_W, height: CAT_H },
-    left:   { position: 'absolute', left: 0,  top: 0, width: CAT_W, height: CAT_H },
-    top:    { position: 'absolute', top: 0,    left: catOffset, width: CAT_W, height: CAT_H },
-    bottom: { position: 'absolute', bottom: 0, left: catOffset, width: CAT_W, height: CAT_H },
-  })[anchorEdge] as React.CSSProperties
+  // CAT-GLUED: the cat cell is at the SAME window position on every edge. It NEVER moves on dock/drag/
+  // hover — the window moves under it (main owns bounds), so main↔renderer never desync → no teleport.
+  const catBoxStyle: React.CSSProperties = {
+    position: 'absolute', left: CAT_X, top: CAT_Y, width: CELL, height: CELL,
+  }
 
-  // panel area (absolute), shifted ~HUG toward the cat to hug it; PANEL_W×PANEL_H content on every edge.
-  // transform-origin points AT the cat so the panel grows out of it.
+  // panel (absolute, fixed size on every edge) positioned next to the constant cat cell, hugged, on the
+  // screen-centre side. Matches getPanelHitRect() in windowManager. transform-origin points AT the cat.
+  const PV_TOP = CAT_Y + CELL / 2 - PANEL_H / 2   // vertical-centre on cat (left/right edges)
+  const PH_LEFT = CAT_X + CELL / 2 - PANEL_W / 2  // horizontal-centre on cat (top/bottom edges)
   const panelStyle = ({
-    right:  { position: 'absolute', left: HUG_X,        top: 0, bottom: 0, width: PANEL_W, transformOrigin: 'right center' },
-    left:   { position: 'absolute', right: HUG_X,       top: 0, bottom: 0, width: PANEL_W, transformOrigin: 'left center' },
-    top:    { position: 'absolute', top: CAT_H - HUG_Y, left: 0, right: 0, height: PANEL_H, transformOrigin: 'center top' },
-    bottom: { position: 'absolute', top: HUG_Y,         left: 0, right: 0, height: PANEL_H, transformOrigin: 'center bottom' },
+    right:  { position: 'absolute', left: CAT_X - PANEL_W + HUG_X, top: PV_TOP, width: PANEL_W, height: PANEL_H, transformOrigin: 'right center' },
+    left:   { position: 'absolute', left: CAT_X + CELL - HUG_X,    top: PV_TOP, width: PANEL_W, height: PANEL_H, transformOrigin: 'left center' },
+    top:    { position: 'absolute', left: PH_LEFT, top: CAT_Y + CELL - HUG_Y,   width: PANEL_W, height: PANEL_H, transformOrigin: 'center top' },
+    bottom: { position: 'absolute', left: PH_LEFT, top: CAT_Y - PANEL_H + HUG_Y, width: PANEL_W, height: PANEL_H, transformOrigin: 'center bottom' },
   })[anchorEdge] as React.CSSProperties
 
   return (

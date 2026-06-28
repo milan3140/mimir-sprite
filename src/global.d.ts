@@ -10,7 +10,7 @@ declare global {
       enterCat: () => void
       leaveCat: () => void
       sendCatRect: (rect: { x: number; y: number; w: number; h: number }) => void
-      sendCatContent: (rect: { x: number; y: number; w: number; h: number }) => void
+      sendCatContent: (rect: { x: number; y: number; w: number; h: number; tight?: boolean }) => void
       // Window
       windowExpand: () => void
       windowCollapse: () => void

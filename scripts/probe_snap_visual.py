@@ -87,8 +87,17 @@ def check(name: str, ok: bool, detail: str = "") -> None:
     print(("PASS " if ok else "FAIL "), name, ("- " + detail) if detail else "")
 
 
-def grab_cat(ghost, scale, attempts: int = 4) -> bool:
+def grab_cat(ghost, scale, wa: dict, attempts: int = 4) -> bool:
     for _ in range(attempts):
+        cx, cy = cat_center_dip()
+        # approach from a NEUTRAL spot diagonally away from the cat so the window first COLLAPSES
+        # (clean state), then hover the cat -> expand -> mousedown. (60px inset avoids pyautogui
+        # FAILSAFE corner-abort.)
+        nx = wa["x"] + (wa["width"] - 60 if cx - wa["x"] < wa["width"] / 2 else 60)
+        ny = wa["y"] + (wa["height"] - 60 if cy - wa["y"] < wa["height"] / 2 else 60)
+        away = g.to_physical(nx, ny, scale)
+        g.move_ghosted(ghost, away[0], away[1], dur=0.3)
+        time.sleep(0.5)  # let it collapse + catRect refresh
         cx, cy = cat_center_dip()
         p = g.to_physical(cx, cy, scale)
         exp_prev = count("window:expand")
@@ -114,11 +123,19 @@ def grab_frame() -> np.ndarray:
     return img
 
 
-def cat_bbox(frame: np.ndarray, bg: np.ndarray, thresh: int = 38, min_area: int = 120):
+def cat_bbox(frame: np.ndarray, bg: np.ndarray, thresh: int = 20, min_area: int = 120,
+             region: tuple[int, int, int, int] | None = None):
     """bg-diff -> mask of changed pixels -> bbox + centroid of the largest dense blob.
-    Returns (cx, cy, x0, y0, x1, y1, area) in PHYSICAL px, or None if nothing significant."""
+    Returns (cx, cy, x0, y0, x1, y1, area) in PHYSICAL px, or None if nothing significant.
+    region = (x0,y0,x1,y1) physical-px STRIP to restrict the diff to (avoids the previous cat
+    position polluting a full-frame diff with a second blob)."""
     d = np.abs(frame.astype(np.int16) - bg.astype(np.int16)).sum(axis=2)
     mask = d > thresh
+    if region:
+        rx0, ry0, rx1, ry1 = region
+        m2 = np.zeros_like(mask)
+        m2[ry0:ry1, rx0:rx1] = mask[ry0:ry1, rx0:rx1]
+        mask = m2
     # kill row/col noise: require a column/row to have enough hits to count
     col = mask.sum(axis=0)
     row = mask.sum(axis=1)
@@ -203,36 +220,48 @@ def main() -> int:
             "bottom": (wa["y"] + wa["height"]) * scale,
         }
 
+        # a STRIP (physical px) near each edge — restricts the diff so the cat's PREVIOUS docked
+        # position (a different edge) can't pollute the trajectory/flush with a second blob.
+        STRIP = int(240 * scale)
+        strip = {
+            "right":  (int(wa_phys["right"]) - STRIP, 0, int(wa_phys["right"]), int(wa["height"] * scale)),
+            "left":   (0, 0, STRIP, int(wa["height"] * scale)),
+            "bottom": (0, int(wa_phys["bottom"]) - STRIP, int(wa["width"] * scale), int(wa_phys["bottom"])),
+            "top":    (0, 0, int(wa["width"] * scale), STRIP),
+        }
+
         # cross-edge sequence so the edge CHANGES every time (teleport only fires on edge change)
         seq = ["right", "bottom", "left", "top", "right"]
+        # dock once at the first edge so the very first transition also has a clean prior state
+        if grab_cat(ghost, scale, wa):
+            sd_prev = count("snap:done")
+            drag_release_burst(ghost, scale, tgt[seq[0]], burst_ms=40)
+            wait_new("snap:done", sd_prev, timeout=6)
+            g.move_ghosted(ghost, *(g.to_physical(wa["x"] + wa["width"] // 2,
+                                                  wa["y"] + wa["height"] // 2, scale)), dur=0.3)
+            time.sleep(0.7)
+
         for i in range(1, len(seq)):
             frm, to = seq[i - 1], seq[i]
+            reg = strip[to]
 
-            # 1) make sure the cat is docked at `frm` (background for the `to` region is then clean)
-            if not grab_cat(ghost, scale):
-                check(f"[{frm}->{to}] grabbed", False); continue
-            sd_prev = count("snap:done")
-            drag_release_burst(ghost, scale, tgt[frm], burst_ms=50)  # just move it there
-            wait_new("snap:done", sd_prev, timeout=6)
-            time.sleep(0.6)
-            # escape hover so it collapses, then grab background
-            g.move_ghosted(ghost, *(g.to_physical(wa["x"] + wa["width"] // 2,
-                                                   wa["y"] + wa["height"] // 2, scale)), dur=0.3)
-            time.sleep(0.6)
+            # background = current frame (cat docked at `frm`, which is NOT in the `to` strip)
             bg = grab_frame()
 
-            # 2) grab + drag to `to`, burst-capture the snap
-            if not grab_cat(ghost, scale):
+            # grab + drag to `to`, burst-capture the snap
+            if not grab_cat(ghost, scale, wa):
                 check(f"[{frm}->{to}] grabbed", False); continue
             check(f"[{frm}->{to}] grabbed", True)
             sd_prev = count("snap:done")
-            frames, tss = drag_release_burst(ghost, scale, tgt[to], burst_ms=650)
+            # burst only through the snap (~370ms); stop before the cursor-lingers-on-cat hover
+            # re-expands the panel (that later transition would pollute the jump metric).
+            frames, tss = drag_release_burst(ghost, scale, tgt[to], burst_ms=470)
             sc = wait_new("snap:done", sd_prev, timeout=6)
 
-            # 3) trajectory from bg-diff
+            # 3) trajectory from bg-diff, restricted to the target-edge strip
             traj = []
             for f, tms in zip(frames, tss):
-                bb = cat_bbox(f, bg)
+                bb = cat_bbox(f, bg, region=reg)
                 if bb:
                     traj.append((tms, bb[0], bb[1], bb[6]))
             # save a few keyframes for the agent to LOOK at
@@ -260,12 +289,35 @@ def main() -> int:
                 elif dd - best > 0:
                     backtrack = max(backtrack, dd - best)
 
-            # 5) settled flush gap
-            time.sleep(0.5)
+            # 5) settled flush gap — move the cursor AWAY first so the panel collapses and the settled
+            # frame is cat-only (a lingering cursor would leave the panel expanded in the bbox).
+            ncx, ncy = cat_center_dip()
+            anx = wa["x"] + (wa["width"] - 60 if ncx - wa["x"] < wa["width"] / 2 else 60)
+            any_ = wa["y"] + (wa["height"] - 60 if ncy - wa["y"] < wa["height"] / 2 else 60)
+            apx = g.to_physical(anx, any_, scale)
+            g.move_ghosted(ghost, apx[0], apx[1], dur=0.3)
+            time.sleep(0.6)
             settled = grab_frame()
-            save_small(settled, f"{frm}_to_{to}_settled")
-            bb = cat_bbox(settled, bg)
+            bb = cat_bbox(settled, bg, region=reg)
             gap = None
+            # DEBUG OVERLAY: draw the DETECTED bbox (green) + the workArea edge line (red) on the crop
+            # so I can SEE whether a reported gap is a real float or a measurement (threshold) artifact.
+            sx0, sy0, sx1, sy1 = reg
+            from PIL import ImageDraw
+            ov = Image.fromarray(settled[sy0:sy1, sx0:sx1, ::-1]).convert("RGB")
+            dr = ImageDraw.Draw(ov)
+            if to == "right":
+                ex = int(wa_phys["right"]) - sx0; dr.line([(ex, 0), (ex, ov.height)], fill=(255, 0, 0), width=2)
+            elif to == "left":
+                ex = int(wa_phys["left"]) - sx0; dr.line([(ex, 0), (ex, ov.height)], fill=(255, 0, 0), width=2)
+            elif to == "bottom":
+                ey = int(wa_phys["bottom"]) - sy0; dr.line([(0, ey), (ov.width, ey)], fill=(255, 0, 0), width=2)
+            else:
+                ey = int(wa_phys["top"]) - sy0; dr.line([(0, ey), (ov.width, ey)], fill=(255, 0, 0), width=2)
+            if bb:
+                _bx0, _by0, _bx1, _by1 = bb[2] - sx0, bb[3] - sy0, bb[4] - sx0, bb[5] - sy0
+                dr.rectangle([_bx0, _by0, _bx1, _by1], outline=(0, 255, 0), width=2)
+            ov.save(OUT / f"{frm}_to_{to}_settled.png")
             if bb:
                 cx, cy, x0, y0, x1, y1, area = bb
                 if to == "right":
@@ -280,6 +332,7 @@ def main() -> int:
 
             print(f"  [{frm}->{to}] frames={len(frames)} traj_pts={len(traj)} "
                   f"max_jump={max_jump:.0f}px backtrack={backtrack:.0f}px gap={gap}")
+            print("    traj(t,cx,cy): " + " ".join(f"{t:.0f}:({cx:.0f},{cy:.0f})" for t, cx, cy, _ in traj))
 
             # ORACLE (pixel-space):
             # (a) SMOOTH: no teleport -> bounded per-frame jump and little backtracking.

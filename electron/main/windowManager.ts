@@ -4,38 +4,50 @@ import { dlog } from './debugLog'
 
 export type AnchorEdge = 'left' | 'right' | 'top' | 'bottom'
 
-// ponytail: collapsed = cat only; expanded = cat + panel
-export const WIN_W = 190
-export const WIN_H = 190
-const PANEL_W = 267   // +1/3 wider (was 200); todo rows/input are flex/w-full so content scales with it
+// ===========================================================================================
+// UNIFIED FIXED-WINDOW, CAT-GLUED MODEL (see TEST_DESIGN.md §6 contract)
+// -------------------------------------------------------------------------------------------
+// The window is ONE fixed size on every edge and in every state. The cat cell sits at a CONSTANT
+// position inside it (CAT_X, CAT_Y) — it is rigidly glued to the window. Docking, dragging and the
+// hover-panel NEVER move the cat within the window and NEVER resize the window:
+//   - snap  = MOVE the window (cat rides along, perfectly in sync — no re-anchor, no teleport)
+//   - hover = CSS panel disclosure only (no native resize — no flicker)
+//   - drag  = MOVE the window at its fixed size (no resize — no grab flash)
+// Only the PANEL repositions per edge, and only while it is collapsed (invisible), so there is no
+// visible main↔renderer desync to flash. This kills the whole flicker/teleport class structurally.
+// ===========================================================================================
+
+const CELL = 190                 // the cat cell (sprite lives in a 190×190 box)
+const PANEL_W = 267
 const PANEL_H = 360
+// the window reserves panel room on BOTH sides of the cat (so the cat's window position is the same
+// for every docked edge); panel only ever shows on the screen-centre side.
+export const WIN_W = CELL + 2 * PANEL_W   // 724
+export const WIN_H = CELL + 2 * PANEL_H   // 910
+const CAT_X = PANEL_W                      // cat cell's constant x inside the window (267)
+const CAT_Y = PANEL_H                      // cat cell's constant y inside the window (360)
 
-// When hidden, the sprite is replaced by two cat ears (Cat-1-Peek) whose bases sit flush on the
-// docked screen edge. Clicking them restores the sprite. Dims must match CatPeek in App.tsx.
-const EAR_W = 70  // ear span ALONG the edge
-const EAR_D = 30  // ear depth poking INTO the screen (perpendicular to the edge)
-
-// HUG: must match App.tsx (panel shifted ~50% of the cat box's transparent padding toward the cat)
+// HUG: pull the panel toward the visible cat (must match App.tsx)
 const HUG_X = 32
 const HUG_Y = 37
 
+// ear nub dims (must match CatPeek in App.tsx)
+const EAR_W = 70
+const EAR_D = 30
+
 let currentlyExpanded = false
 let currentEdge: AnchorEdge = 'right'
-let snapping = false                       // true while the ~320ms snap animation runs
-// FIXED-WINDOW MODEL: while docked the window is ALWAYS the EXPANDED size (so hover never resizes →
-// no flicker). dockedBounds = that expanded rect; docked190 = the small cat-only rect used for
-// dragging; dockedCatOffset = the cat box's in-window x offset (for top/bottom centring).
-let dockedBounds: Rectangle | null = null
-let docked190: Rectangle | null = null
-let dockedCatOffset = 0
-let dragSize = { width: WIN_W, height: WIN_H } // window size held during a drag (the docked/expanded size)
-// the sprite's visible content box within a 190 cell (constant, captured once before the first dock);
-// snap uses it to flush the cat to an edge independently of the current window size / cell.
-let spriteContentBox = { x: 0, y: 0, w: 0, h: 0 }
-let dragging = false                       // true while mouse-drag is active
-let hidden = false                         // true while showing the edge nub
+let snapping = false
+let dragging = false
+let hidden = false
+let didInitialDock = false
+let dockedBounds: Rectangle | null = null      // the fixed-size window rect at its docked position
 let preHideBounds: Rectangle | null = null
-let didInitialDock = false                 // snap once on first cat:content so hover works at boot
+// tight visible cat-content box in CELL coordinates (0..190). Captured ONLY from a cellBox-ready
+// ("tight") report — never the boot fallback full render box (that was the 150×150 not-flush bug).
+let spriteContentBox = { x: 0, y: 0, w: 0, h: 0 }
+let scTight = false
+let latestCatRect = { x: 0, y: 0, w: 0, h: 0 } // window-relative sprite hit rect (from renderer)
 
 export function isExpanded(): boolean { return currentlyExpanded }
 export function isSnapping(): boolean { return snapping }
@@ -81,41 +93,23 @@ export function createWindow(): BrowserWindow {
     dlog('win:created', { askedW: WIN_W, askedH: WIN_H, gotW: w, gotH: h, x, y })
   })
 
-  // Expand/collapse is driven by the main-process cursor poll in clickThrough.ts —
-  // renderer mouseover/leave through a click-through, self-resizing window was unreliable
-  // (re-hover stuck, flicker-collapse, residual panel sliver). Main is the single authority.
-
-  // --- Drag driven entirely from main via cursor polling (DPI-safe) ---
+  // --- Drag driven from main via cursor polling (DPI-safe). The window is ALWAYS WIN_W×WIN_H, so a
+  //     drag is a pure MOVE at fixed size — no resize, no grab flash. ---
   let dragOffset = { x: 0, y: 0 }
   let dragInterval: ReturnType<typeof setInterval> | null = null
-  let pollCount = 0
 
   ipcMain.on('drag:start', (_e, catScreenRect?: { x: number; y: number; w: number; h: number }) => {
     if (win.isDestroyed() || hidden) return
-    // close the panel (CSS only). FIXED-WINDOW MODEL: do NOT resize on grab — drag the window AT ITS
-    // CURRENT (expanded) size with the cat still at its cell. Resizing to 190 here re-introduced the
-    // grab flash (a native shrink/move desynced from the renderer's async catOffset). Dragging the
-    // big window keeps the cat exactly under the cursor with no resize at all.
     if (currentlyExpanded) collapseWindow(win)
-
     const cursor = screen.getCursorScreenPoint()
     const [wx, wy] = win.getPosition()
-    const [ww, wh] = win.getSize()
-    dragSize = { width: ww, height: wh }
     dragOffset = { x: cursor.x - wx, y: cursor.y - wy }
     dragging = true
-    pollCount = 0
-
     const disp = screen.getDisplayNearestPoint(cursor)
-    const overCat = catScreenRect
-      ? cursor.x >= catScreenRect.x && cursor.x <= catScreenRect.x + catScreenRect.w &&
-        cursor.y >= catScreenRect.y && cursor.y <= catScreenRect.y + catScreenRect.h
-      : 'unknown'
     dlog('drag:start', {
-      cursor, winPos: { x: wx, y: wy }, winSize: { w: ww, h: wh },
-      offset: dragOffset, scaleFactor: disp.scaleFactor, overCat, catScreenRect
+      cursor, winPos: { x: wx, y: wy }, winSize: { w: WIN_W, h: WIN_H },
+      offset: dragOffset, scaleFactor: disp.scaleFactor, catScreenRect
     })
-
     dragInterval = setInterval(() => {
       if (!dragging || win.isDestroyed()) {
         if (dragInterval) clearInterval(dragInterval)
@@ -125,41 +119,30 @@ export function createWindow(): BrowserWindow {
       const nx = Math.round(c.x - dragOffset.x)
       const ny = Math.round(c.y - dragOffset.y)
       if (!Number.isFinite(nx) || !Number.isFinite(ny)) return
-      // Drag the window AT ITS CURRENT SIZE (no resize → no grab flash). No clamp: the cursor is
-      // always on-screen and the cat sits at a fixed offset from it, so the cat is never lost.
-      win.setBounds({ x: nx, y: ny, width: dragSize.width, height: dragSize.height })
-      pollCount++
-      if (pollCount % 12 === 0) {
-        const [ax, ay] = win.getPosition()
-        const [sw, sh] = win.getSize()
-        dlog('drag:move', {
-          cursor: c, set: { x: nx, y: ny }, actual: { x: ax, y: ay }, size: { w: sw, h: sh }
-        })
-      }
+      win.setBounds({ x: nx, y: ny, width: WIN_W, height: WIN_H }) // MOVE only, fixed size
     }, 16)
   })
 
-  ipcMain.on('cat:content', (_e, rect: { x: number; y: number; w: number; h: number }) => {
-    if (rect && rect.w > 0 && rect.h > 0) {
-      latestCatRect = rect
-      // Capture the sprite's content box within a 190 cell ONCE, before the first dock — at that
-      // point the window is the 190 cat-only window with the cat filling it (catOffset 0), so the
-      // reported content rect IS the cell-relative content box. snap reuses it for flushing.
-      if (spriteContentBox.w === 0 && !didInitialDock) spriteContentBox = { ...rect }
-      // log the cat's live SCREEN rect (DIP) so a probe can locate it exactly before grabbing
-      if (!win.isDestroyed()) {
-        const [wx, wy] = win.getPosition()
-        dlog('cat:screen', {
-          x: Math.round(wx + rect.x), y: Math.round(wy + rect.y),
-          w: Math.round(rect.w), h: Math.round(rect.h)
-        })
-      }
-      // FIXED-WINDOW MODEL: dock once at boot so the window becomes the expanded size and hover never
-      // has to resize. Needs the cat rect (just arrived), so do it on the first cat:content.
-      if (!didInitialDock && !dragging && !snapping && !hidden && !currentlyExpanded && !win.isDestroyed()) {
-        didInitialDock = true
-        snapToNearestEdge(win)
-      }
+  ipcMain.on('cat:content', (_e, rect: { x: number; y: number; w: number; h: number; tight?: boolean }) => {
+    if (!rect || rect.w <= 0 || rect.h <= 0) return
+    latestCatRect = { x: rect.x, y: rect.y, w: rect.w, h: rect.h }
+    // capture the cell-relative TIGHT content box (cat is glued at CAT_X,CAT_Y, so cell = window - CAT_*).
+    // Only from a tight (cellBox-ready) report — the boot fallback full box gave the 59px not-flush bug.
+    if (rect.tight) {
+      spriteContentBox = { x: rect.x - CAT_X, y: rect.y - CAT_Y, w: rect.w, h: rect.h }
+      scTight = true
+    }
+    if (!win.isDestroyed()) {
+      const [wx, wy] = win.getPosition()
+      dlog('cat:screen', {
+        x: Math.round(wx + rect.x), y: Math.round(wy + rect.y),
+        w: Math.round(rect.w), h: Math.round(rect.h)
+      })
+    }
+    // Dock once at boot — but ONLY after a tight content box arrives, so flush is correct from frame 1.
+    if (!didInitialDock && scTight && !dragging && !snapping && !hidden && !currentlyExpanded && !win.isDestroyed()) {
+      didInitialDock = true
+      snapToNearestEdge(win)
     }
   })
 
@@ -175,100 +158,59 @@ export function createWindow(): BrowserWindow {
   return win
 }
 
-// --- Expand/Collapse (FIXED-WINDOW MODEL) ---
-// While docked the window is ALREADY the expanded size (set on snap), so expand/collapse NEVER
-// resize or move the native window — they only toggle the panel and the renderer animates it via a
-// CSS transform/opacity disclosure. No native resize on the hover path → no native-vs-renderer frame
-// mismatch → no flicker/deform. (Research-validated; see CLAUDE.md red line.)
-
-// Given the 190 cat-only docked bounds (cat content flush at edge), compute the EXPANDED window
-// bounds + the cat box's in-window x offset (catOffset; for top/bottom horizontal centring).
-function computeExpanded(d190: Rectangle, edge: AnchorEdge): { bounds: Rectangle; catOffset: number } {
-  const { x: wx, y: wy } = d190
-  const wa = screen.getDisplayMatching(d190).workArea
-  const catCenterX = wx + WIN_W / 2
-  let bx = wx, by = wy, bw = WIN_W, bh = WIN_H
-  switch (edge) {
-    case 'right':  bx = wx - PANEL_W; by = wy; bw = WIN_W + PANEL_W; bh = PANEL_H; break
-    case 'left':   bx = wx; by = wy; bw = WIN_W + PANEL_W; bh = PANEL_H; break
-    case 'top':    bw = PANEL_W; bh = WIN_H + PANEL_H; by = wy; bx = catCenterX - PANEL_W / 2; break
-    case 'bottom': bw = PANEL_W; bh = WIN_H + PANEL_H; by = wy - PANEL_H; bx = catCenterX - PANEL_W / 2; break
-  }
-  // clamp the panel-growth axis on-screen; the docked-edge axis stays put (cat doesn't move)
-  if (edge === 'left' || edge === 'right') by = clamp(by, wa.y, wa.y + wa.height - bh)
-  else bx = clamp(bx, wa.x, wa.x + wa.width - bw)
-  bx = Math.round(bx); by = Math.round(by)
-  return { bounds: { x: bx, y: by, width: bw, height: bh }, catOffset: wx - bx }
+// cat content box in WINDOW coordinates (cat is glued at CAT_X,CAT_Y; sc is its cell offset)
+function contentInWindow(): { x: number; y: number; w: number; h: number } {
+  const sc = scTight ? spriteContentBox : { x: 0, y: 0, w: CELL, h: CELL }
+  return { x: CAT_X + sc.x, y: CAT_Y + sc.y, w: sc.w, h: sc.h }
 }
 
-// The panel's window-relative hit rect for the current docked edge (matches App.tsx panelStyle).
-// Used by the click-through poll to know when the cursor is over the panel (the window is always the
-// big expanded size, so "outside the window" is no longer the collapse trigger).
-export function getPanelHitRect(): Rectangle | null {
-  if (!dockedBounds) return null
-  const W = dockedBounds.width, H = dockedBounds.height
-  switch (currentEdge) {
-    case 'right':  return { x: HUG_X, y: 0, width: PANEL_W, height: H }
-    case 'left':   return { x: W - HUG_X - PANEL_W, y: 0, width: PANEL_W, height: H }
-    case 'top':    return { x: 0, y: WIN_H - HUG_Y, width: W, height: PANEL_H }
-    case 'bottom': return { x: 0, y: HUG_Y, width: W, height: PANEL_H }
-  }
-  return null
-}
-
+// --- Expand / Collapse: NO native resize (window already the right size) — CSS panel disclosure only.
 export function expandWindow(win: BrowserWindow): void {
-  // can't expand before the first dock (window must already be the expanded size)
   if (win.isDestroyed() || currentlyExpanded || snapping || dragging || hidden || !dockedBounds) return
   currentlyExpanded = true
-  // NO setBounds — window is already expanded-size. Just open the panel (renderer CSS-animates it).
-  win.webContents.send('window:expanded', { expanded: true, edge: currentEdge, catOffset: dockedCatOffset })
-  dlog('window:expand', { to: dockedBounds, edge: currentEdge, catOffset: dockedCatOffset })
+  win.webContents.send('window:expanded', { expanded: true, edge: currentEdge, catOffset: 0 })
+  dlog('window:expand', { to: dockedBounds, edge: currentEdge })
 }
 
 export function collapseWindow(win: BrowserWindow): void {
   if (win.isDestroyed() || !currentlyExpanded) return
   currentlyExpanded = false
-  // NO setBounds — close the panel via CSS only. (clickThrough re-arms click-through per cursor.)
-  win.webContents.send('window:expanded', { expanded: false, edge: currentEdge, catOffset: dockedCatOffset })
+  win.webContents.send('window:expanded', { expanded: false, edge: currentEdge, catOffset: 0 })
   dlog('window:collapse', { edge: currentEdge })
 }
 
-// --- Hide to nub / restore ---
+// The panel's window-relative hit rect for the current docked edge (must match App.tsx panelStyle).
+export function getPanelHitRect(): Rectangle | null {
+  if (!dockedBounds) return null
+  switch (currentEdge) {
+    case 'right':  return { x: CAT_X - PANEL_W + HUG_X, y: CAT_Y + CELL / 2 - PANEL_H / 2, width: PANEL_W, height: PANEL_H }
+    case 'left':   return { x: CAT_X + CELL - HUG_X,    y: CAT_Y + CELL / 2 - PANEL_H / 2, width: PANEL_W, height: PANEL_H }
+    case 'top':    return { x: CAT_X + CELL / 2 - PANEL_W / 2, y: CAT_Y + CELL - HUG_Y,    width: PANEL_W, height: PANEL_H }
+    case 'bottom': return { x: CAT_X + CELL / 2 - PANEL_W / 2, y: CAT_Y - PANEL_H + HUG_Y, width: PANEL_W, height: PANEL_H }
+  }
+  return null
+}
 
+// --- Hide to nub / restore ---
 export function hideToNub(win: BrowserWindow): void {
   if (win.isDestroyed() || hidden) return
   if (currentlyExpanded) collapseWindow(win)
   preHideBounds = dockedBounds ?? win.getBounds()
   const { x: wx, y: wy } = preHideBounds
-
-  // The peek face sits flush at the SCREEN workArea edge (the docked window itself hangs partly
-  // off-screen, so we anchor to the screen, not the window bounds), centred where the cat was.
-  // top/bottom show the whole face; left/right show a vertical slice peeking around the edge.
   const wa = screen.getDisplayMatching(preHideBounds).workArea
-  const cr = latestCatRect.w > 0 && latestCatRect.h > 0
-    ? latestCatRect : { x: 0, y: 0, w: WIN_W, h: WIN_H }
-  const ccx = wx + cr.x + cr.w / 2      // cat content centre x (screen)
-  const ccy = wy + cr.y + cr.h / 2      // cat content centre y (screen)
-
+  const cc = contentInWindow()
+  const ccx = wx + cc.x + cc.w / 2
+  const ccy = wy + cc.y + cc.h / 2
   let nx = 0, ny = 0, nw = 0, nh = 0
   switch (currentEdge) {
-    case 'bottom':
-      nw = EAR_W; nh = EAR_D
-      nx = clamp(Math.round(ccx - EAR_W / 2), wa.x, wa.x + wa.width - nw); ny = wa.y + wa.height - EAR_D; break
-    case 'top':
-      nw = EAR_W; nh = EAR_D
-      nx = clamp(Math.round(ccx - EAR_W / 2), wa.x, wa.x + wa.width - nw); ny = wa.y; break
-    case 'left':
-      nw = EAR_D; nh = EAR_W
-      nx = wa.x; ny = clamp(Math.round(ccy - EAR_W / 2), wa.y, wa.y + wa.height - nh); break
-    case 'right':
-      nw = EAR_D; nh = EAR_W
-      nx = wa.x + wa.width - EAR_D; ny = clamp(Math.round(ccy - EAR_W / 2), wa.y, wa.y + wa.height - nh); break
+    case 'bottom': nw = EAR_W; nh = EAR_D; nx = clamp(Math.round(ccx - EAR_W / 2), wa.x, wa.x + wa.width - nw); ny = wa.y + wa.height - EAR_D; break
+    case 'top':    nw = EAR_W; nh = EAR_D; nx = clamp(Math.round(ccx - EAR_W / 2), wa.x, wa.x + wa.width - nw); ny = wa.y; break
+    case 'left':   nw = EAR_D; nh = EAR_W; nx = wa.x; ny = clamp(Math.round(ccy - EAR_W / 2), wa.y, wa.y + wa.height - nh); break
+    case 'right':  nw = EAR_D; nh = EAR_W; nx = wa.x + wa.width - EAR_D; ny = clamp(Math.round(ccy - EAR_W / 2), wa.y, wa.y + wa.height - nh); break
   }
-
   hidden = true
   win.setBounds({ x: nx, y: ny, width: nw, height: nh })
-  win.setIgnoreMouseEvents(false) // peek strip fully clickable (click to restore)
+  win.setIgnoreMouseEvents(false)
   win.webContents.send('window:hidden', { hidden: true, edge: currentEdge })
   dlog('window:hideToNub', { preHideBounds, nub: { x: nx, y: ny, w: nw, h: nh }, edge: currentEdge, wa })
 }
@@ -282,78 +224,66 @@ export function restoreFromNub(win: BrowserWindow): void {
   dlog('window:restoreFromNub', { bounds: preHideBounds, edge: currentEdge })
 }
 
-// --- Snap ---
-
+// --- Snap: pick nearest edge from the cat's CURRENT screen position, then MOVE the fixed-size window
+//     so the cat content is flush at that edge. The cat is glued to the window, so it rides the move
+//     in perfect sync — no re-anchor, no teleport, no resize. ---
 let snapInterval: ReturnType<typeof setInterval> | null = null
-let latestCatRect = { x: 0, y: 0, w: 0, h: 0 }
 
 function snapToNearestEdge(win: BrowserWindow): void {
   if (snapInterval) { clearInterval(snapInterval); snapInterval = null }
-
-  const start = win.getBounds()                       // current window (may be the big drag window)
+  const start = win.getBounds()
   const wa = screen.getDisplayMatching(start).workArea
+  const cc = contentInWindow() // cat content in window coords (constant layout)
 
-  // cat content rect within the CURRENT window (includes the cell offset when the window is big)
-  const cr = latestCatRect.w > 0 && latestCatRect.h > 0
-    ? latestCatRect : { x: 0, y: 0, w: WIN_W, h: WIN_H }
-  // constant sprite content box within a 190 cell — used to flush independently of window size/cell
-  const sc = spriteContentBox.w > 0 ? spriteContentBox : cr
-
-  // pick the edge from the cat's current SCREEN centre (cell-independent)
-  const ccx = start.x + cr.x + cr.w / 2
-  const ccy = start.y + cr.y + cr.h / 2
+  // cat content screen centre → nearest edge
+  const ccx = start.x + cc.x + cc.w / 2
+  const ccy = start.y + cc.y + cc.h / 2
   const distances = {
     left: ccx - wa.x, right: wa.x + wa.width - ccx,
     top: ccy - wa.y, bottom: wa.y + wa.height - ccy
   }
-  const edge = (Object.keys(distances) as AnchorEdge[]).reduce((a, b) =>
-    distances[a] <= distances[b] ? a : b)
+  const edge = (Object.keys(distances) as AnchorEdge[]).reduce((a, b) => distances[a] <= distances[b] ? a : b)
   currentEdge = edge
 
-  // 190 cat-only flush target: cat CONTENT (sc) flush at the edge; perpendicular axis keeps the cat
-  // where it was dropped (its content screen pos = start + cr).
-  const catContentX = start.x + cr.x, catContentY = start.y + cr.y
+  // target window pos: flush on the docked axis; keep current position on the perpendicular axis
+  // (clamped so the cat content stays fully within the workArea).
   let tx = start.x, ty = start.y
+  const vClampLo = wa.y - cc.y, vClampHi = wa.y + wa.height - cc.h - cc.y
+  const hClampLo = wa.x - cc.x, hClampHi = wa.x + wa.width - cc.w - cc.x
   switch (edge) {
-    case 'left':   tx = wa.x - sc.x;                      ty = clamp(catContentY - sc.y, wa.y, wa.y + wa.height - WIN_H); break
-    case 'right':  tx = wa.x + wa.width - (sc.x + sc.w);  ty = clamp(catContentY - sc.y, wa.y, wa.y + wa.height - WIN_H); break
-    case 'top':    ty = wa.y - sc.y;                      tx = clamp(catContentX - sc.x, wa.x, wa.x + wa.width - WIN_W); break
-    case 'bottom': ty = wa.y + wa.height - (sc.y + sc.h); tx = clamp(catContentX - sc.x, wa.x, wa.x + wa.width - WIN_W); break
+    case 'left':   tx = wa.x - cc.x;                       ty = clamp(start.y, vClampLo, vClampHi); break
+    case 'right':  tx = wa.x + wa.width - cc.w - cc.x;     ty = clamp(start.y, vClampLo, vClampHi); break
+    case 'top':    ty = wa.y - cc.y;                       tx = clamp(start.x, hClampLo, hClampHi); break
+    case 'bottom': ty = wa.y + wa.height - cc.h - cc.y;    tx = clamp(start.x, hClampLo, hClampHi); break
   }
   tx = Math.round(tx); ty = Math.round(ty)
-  const d190 = { x: tx, y: ty, width: WIN_W, height: WIN_H }
-  const exp = computeExpanded(d190, edge)
+  const target = { x: tx, y: ty, width: WIN_W, height: WIN_H }
 
-  // switch the renderer to the new docked layout NOW (cat at the new cell, panel closed) so the cat
-  // sits in the right cell as the window animates to the expanded docked bounds
-  win.webContents.send('window:expanded', { expanded: false, edge, catOffset: exp.catOffset })
+  // Tell the renderer the new edge NOW — this only repositions the (collapsed → invisible) panel and
+  // flips the cat to face into the screen; the cat's window POSITION is unchanged, so nothing jumps.
+  win.webContents.send('window:expanded', { expanded: false, edge, catOffset: 0 })
   if (!win.isDestroyed()) win.webContents.send('anchor:changed', edge)
-  dlog('snap:compute', { start, catRect: cr, sc, distances, edge, d190, expanded: exp.bounds, wa })
+  dlog('snap:compute', { start, content: cc, edge, target, wa })
 
-  const frames = 20
+  const frames = 22
   let frame = 0
-  snapping = true // block hover-expand until docked
+  snapping = true
   snapInterval = setInterval(() => {
     if (win.isDestroyed()) { clearInterval(snapInterval!); snapInterval = null; snapping = false; return }
     frame++
     const t = easeOut(frame / frames)
-    const x = Math.round(start.x + (exp.bounds.x - start.x) * t)
-    const y = Math.round(start.y + (exp.bounds.y - start.y) * t)
-    const w = Math.round(start.width + (exp.bounds.width - start.width) * t)
-    const h = Math.round(start.height + (exp.bounds.height - start.height) * t)
-    if (Number.isFinite(x) && Number.isFinite(y)) win.setBounds({ x, y, width: w, height: h })
+    const x = Math.round(start.x + (target.x - start.x) * t)
+    const y = Math.round(start.y + (target.y - start.y) * t)
+    if (Number.isFinite(x) && Number.isFinite(y)) win.setBounds({ x, y, width: WIN_W, height: WIN_H }) // MOVE only
     if (frame >= frames) {
       clearInterval(snapInterval!); snapInterval = null
-      docked190 = d190
-      dockedBounds = exp.bounds
-      dockedCatOffset = exp.catOffset
+      dockedBounds = target
       currentlyExpanded = false
-      win.setBounds(exp.bounds)
+      win.setBounds(target)
       win.setIgnoreMouseEvents(true, { forward: true })
       snapping = false
-      // cat content screen position after dock = the flush position (tx+sc within the cell)
-      dlog('cat:screen', { x: Math.round(tx + sc.x), y: Math.round(ty + sc.y), w: Math.round(sc.w), h: Math.round(sc.h) })
-      dlog('snap:done', { target: d190, expanded: exp.bounds, edge, catOffset: exp.catOffset })
+      dlog('cat:screen', { x: Math.round(tx + cc.x), y: Math.round(ty + cc.y), w: Math.round(cc.w), h: Math.round(cc.h) })
+      dlog('snap:done', { target, edge, flush: { x: tx + cc.x, y: ty + cc.y } })
     }
   }, 16)
 }
@@ -364,5 +294,7 @@ function clamp(v: number, min: number, max: number): number {
 }
 
 function easeOut(t: number): number {
-  return 1 - Math.pow(1 - t, 3)
+  // quadratic ease-out: gentler first-frame step than cubic on long flings (no big leading jump),
+  // still settles smoothly. Snap distances are usually small, so this is just insurance.
+  return 1 - (1 - t) * (1 - t)
 }
