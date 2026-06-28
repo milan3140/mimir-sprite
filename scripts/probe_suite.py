@@ -156,6 +156,14 @@ def main() -> int:
             check(f"[{edge}] grabbed cat", grabbed)
             if not grabbed:
                 continue
+            # DYNAMIC INVARIANT (grab path): grabbing must NOT resize the native window — the old code
+            # shrank the docked (expanded) window to 190 on drag:start, which flashed. The window is
+            # dragged at its current (expanded) size, so drag:start sees a >190 window.
+            ds = last_json("drag:start")
+            if ds and isinstance(ds.get("winSize"), dict):
+                s = ds["winSize"]
+                check(f"[{edge}] grab NO-resize (no flash)", s.get("w", 0) > 190 or s.get("h", 0) > 190,
+                      f"winSize={s} (should be the expanded size, not 190×190)")
             sd_prev = count("snap:done")
             g.move_ghosted(ghost, targets[edge][0], targets[edge][1], dur=0.8)
             pyautogui.mouseUp()

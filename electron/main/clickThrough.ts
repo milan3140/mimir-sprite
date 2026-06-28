@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain, screen } from 'electron'
-import { isExpanded, isHidden, isSnapping, expandWindow, collapseWindow, getPanelHitRect } from './windowManager'
+import { isExpanded, isHidden, isSnapping, isDragging, expandWindow, collapseWindow, getPanelHitRect } from './windowManager'
 
 /**
  * Main-process cursor controller (single source of truth) for the FIXED-WINDOW model. The window is
@@ -28,7 +28,7 @@ export function setupClickThrough(win: BrowserWindow): void {
   }
 
   setInterval(() => {
-    if (win.isDestroyed() || !win.isVisible() || isHidden() || isSnapping()) return
+    if (win.isDestroyed() || !win.isVisible() || isHidden() || isSnapping() || isDragging()) return
     const cursor = screen.getCursorScreenPoint()
     const b = win.getBounds()
     const relX = cursor.x - b.x

@@ -28,6 +28,10 @@ let snapping = false                       // true while the ~320ms snap animati
 let dockedBounds: Rectangle | null = null
 let docked190: Rectangle | null = null
 let dockedCatOffset = 0
+let dragSize = { width: WIN_W, height: WIN_H } // window size held during a drag (the docked/expanded size)
+// the sprite's visible content box within a 190 cell (constant, captured once before the first dock);
+// snap uses it to flush the cat to an edge independently of the current window size / cell.
+let spriteContentBox = { x: 0, y: 0, w: 0, h: 0 }
 let dragging = false                       // true while mouse-drag is active
 let hidden = false                         // true while showing the edge nub
 let preHideBounds: Rectangle | null = null
@@ -36,6 +40,7 @@ let didInitialDock = false                 // snap once on first cat:content so 
 export function isExpanded(): boolean { return currentlyExpanded }
 export function isSnapping(): boolean { return snapping }
 export function isHidden(): boolean { return hidden }
+export function isDragging(): boolean { return dragging }
 
 export function createWindow(): BrowserWindow {
   const preload = join(__dirname, '../preload/index.js')
@@ -87,19 +92,16 @@ export function createWindow(): BrowserWindow {
 
   ipcMain.on('drag:start', (_e, catScreenRect?: { x: number; y: number; w: number; h: number }) => {
     if (win.isDestroyed() || hidden) return
-    // close the panel (CSS only, no resize)
+    // close the panel (CSS only). FIXED-WINDOW MODEL: do NOT resize on grab — drag the window AT ITS
+    // CURRENT (expanded) size with the cat still at its cell. Resizing to 190 here re-introduced the
+    // grab flash (a native shrink/move desynced from the renderer's async catOffset). Dragging the
+    // big window keeps the cat exactly under the cursor with no resize at all.
     if (currentlyExpanded) collapseWindow(win)
-    // FIXED-WINDOW MODEL: the docked window is the EXPANDED size. Shrink to the 190 cat-only window
-    // for dragging — docked190 had the cat content flush at the same screen spot, so the visible cat
-    // doesn't move. Tell the renderer to fill the 190 window (catOffset 0). Clear dockedBounds so a
-    // mid-drag collapse can't jump to a stale edge.
-    if (docked190) win.setBounds(docked190)
-    win.webContents.send('window:expanded', { expanded: false, edge: currentEdge, catOffset: 0 })
-    dockedBounds = null
 
     const cursor = screen.getCursorScreenPoint()
     const [wx, wy] = win.getPosition()
     const [ww, wh] = win.getSize()
+    dragSize = { width: ww, height: wh }
     dragOffset = { x: cursor.x - wx, y: cursor.y - wy }
     dragging = true
     pollCount = 0
@@ -123,11 +125,9 @@ export function createWindow(): BrowserWindow {
       const nx = Math.round(c.x - dragOffset.x)
       const ny = Math.round(c.y - dragOffset.y)
       if (!Number.isFinite(nx) || !Number.isFinite(ny)) return
-      // NO clamp during drag: the docked window legitimately hangs off-screen (cat content flush to
-      // the edge, transparent margin past it). Clamping it on-screen at grab made the cat jump
-      // forward for a frame before catching up to the cursor. The cursor is always on-screen and the
-      // cat sits at a fixed offset from it, so the cat is never lost.
-      win.setBounds({ x: nx, y: ny, width: WIN_W, height: WIN_H })
+      // Drag the window AT ITS CURRENT SIZE (no resize → no grab flash). No clamp: the cursor is
+      // always on-screen and the cat sits at a fixed offset from it, so the cat is never lost.
+      win.setBounds({ x: nx, y: ny, width: dragSize.width, height: dragSize.height })
       pollCount++
       if (pollCount % 12 === 0) {
         const [ax, ay] = win.getPosition()
@@ -142,6 +142,10 @@ export function createWindow(): BrowserWindow {
   ipcMain.on('cat:content', (_e, rect: { x: number; y: number; w: number; h: number }) => {
     if (rect && rect.w > 0 && rect.h > 0) {
       latestCatRect = rect
+      // Capture the sprite's content box within a 190 cell ONCE, before the first dock — at that
+      // point the window is the 190 cat-only window with the cat filling it (catOffset 0), so the
+      // reported content rect IS the cell-relative content box. snap reuses it for flushing.
+      if (spriteContentBox.w === 0 && !didInitialDock) spriteContentBox = { ...rect }
       // log the cat's live SCREEN rect (DIP) so a probe can locate it exactly before grabbing
       if (!win.isDestroyed()) {
         const [wx, wy] = win.getPosition()
@@ -286,86 +290,70 @@ let latestCatRect = { x: 0, y: 0, w: 0, h: 0 }
 function snapToNearestEdge(win: BrowserWindow): void {
   if (snapInterval) { clearInterval(snapInterval); snapInterval = null }
 
-  const [wx, wy] = win.getPosition()
-  const [reportedW, reportedH] = win.getSize()
-  const ww = WIN_W, wh = WIN_H
-  const cursor = screen.getCursorScreenPoint()
+  const start = win.getBounds()                       // current window (may be the big drag window)
+  const wa = screen.getDisplayMatching(start).workArea
 
-  const dispByCursor = screen.getDisplayNearestPoint(cursor)
-  const dispByWindow = screen.getDisplayMatching({ x: wx, y: wy, width: ww, height: wh })
-  const wa = dispByWindow.workArea
-
+  // cat content rect within the CURRENT window (includes the cell offset when the window is big)
   const cr = latestCatRect.w > 0 && latestCatRect.h > 0
-    ? latestCatRect : { x: 0, y: 0, w: ww, h: wh }
+    ? latestCatRect : { x: 0, y: 0, w: WIN_W, h: WIN_H }
+  // constant sprite content box within a 190 cell — used to flush independently of window size/cell
+  const sc = spriteContentBox.w > 0 ? spriteContentBox : cr
 
-  const ccx = wx + cr.x + cr.w / 2
-  const ccy = wy + cr.y + cr.h / 2
+  // pick the edge from the cat's current SCREEN centre (cell-independent)
+  const ccx = start.x + cr.x + cr.w / 2
+  const ccy = start.y + cr.y + cr.h / 2
   const distances = {
-    left: ccx - wa.x,
-    right: wa.x + wa.width - ccx,
-    top: ccy - wa.y,
-    bottom: wa.y + wa.height - ccy
+    left: ccx - wa.x, right: wa.x + wa.width - ccx,
+    top: ccy - wa.y, bottom: wa.y + wa.height - ccy
   }
-
   const edge = (Object.keys(distances) as AnchorEdge[]).reduce((a, b) =>
-    distances[a] <= distances[b] ? a : b
-  )
+    distances[a] <= distances[b] ? a : b)
   currentEdge = edge
 
-  let tx = wx, ty = wy
+  // 190 cat-only flush target: cat CONTENT (sc) flush at the edge; perpendicular axis keeps the cat
+  // where it was dropped (its content screen pos = start + cr).
+  const catContentX = start.x + cr.x, catContentY = start.y + cr.y
+  let tx = start.x, ty = start.y
   switch (edge) {
-    case 'left':   tx = wa.x - cr.x;                      ty = clamp(wy, wa.y, wa.y + wa.height - wh); break
-    case 'right':  tx = wa.x + wa.width - (cr.x + cr.w);  ty = clamp(wy, wa.y, wa.y + wa.height - wh); break
-    case 'top':    ty = wa.y - cr.y;                      tx = clamp(wx, wa.x, wa.x + wa.width - ww);  break
-    case 'bottom': ty = wa.y + wa.height - (cr.y + cr.h); tx = clamp(wx, wa.x, wa.x + wa.width - ww);  break
+    case 'left':   tx = wa.x - sc.x;                      ty = clamp(catContentY - sc.y, wa.y, wa.y + wa.height - WIN_H); break
+    case 'right':  tx = wa.x + wa.width - (sc.x + sc.w);  ty = clamp(catContentY - sc.y, wa.y, wa.y + wa.height - WIN_H); break
+    case 'top':    ty = wa.y - sc.y;                      tx = clamp(catContentX - sc.x, wa.x, wa.x + wa.width - WIN_W); break
+    case 'bottom': ty = wa.y + wa.height - (sc.y + sc.h); tx = clamp(catContentX - sc.x, wa.x, wa.x + wa.width - WIN_W); break
   }
   tx = Math.round(tx); ty = Math.round(ty)
+  const d190 = { x: tx, y: ty, width: WIN_W, height: WIN_H }
+  const exp = computeExpanded(d190, edge)
 
-  dlog('snap:compute', {
-    winPos: { x: wx, y: wy }, sizeUsed: { w: ww, h: wh },
-    reportedSize: { w: reportedW, h: reportedH },
-    catRect: cr, distances, edge, target: { x: tx, y: ty },
-    scaleFactor: dispByWindow.scaleFactor, workArea: wa,
-    sameDisplay: dispByCursor.id === dispByWindow.id
-  })
+  // switch the renderer to the new docked layout NOW (cat at the new cell, panel closed) so the cat
+  // sits in the right cell as the window animates to the expanded docked bounds
+  win.webContents.send('window:expanded', { expanded: false, edge, catOffset: exp.catOffset })
+  if (!win.isDestroyed()) win.webContents.send('anchor:changed', edge)
+  dlog('snap:compute', { start, catRect: cr, sc, distances, edge, d190, expanded: exp.bounds, wa })
 
   const frames = 20
-  const startX = wx, startY = wy
   let frame = 0
-  snapping = true // block hover-expand until the cat is docked at the edge
-
+  snapping = true // block hover-expand until docked
   snapInterval = setInterval(() => {
     if (win.isDestroyed()) { clearInterval(snapInterval!); snapInterval = null; snapping = false; return }
     frame++
     const t = easeOut(frame / frames)
-    const x = Math.round(startX + (tx - startX) * t)
-    const y = Math.round(startY + (ty - startY) * t)
-    if (Number.isFinite(x) && Number.isFinite(y)) win.setBounds({ x, y, width: WIN_W, height: WIN_H })
+    const x = Math.round(start.x + (exp.bounds.x - start.x) * t)
+    const y = Math.round(start.y + (exp.bounds.y - start.y) * t)
+    const w = Math.round(start.width + (exp.bounds.width - start.width) * t)
+    const h = Math.round(start.height + (exp.bounds.height - start.height) * t)
+    if (Number.isFinite(x) && Number.isFinite(y)) win.setBounds({ x, y, width: w, height: h })
     if (frame >= frames) {
       clearInterval(snapInterval!); snapInterval = null
-      // FIXED-WINDOW MODEL: the 190 cat-only window is now flush at the edge. Grow it to the EXPANDED
-      // size in place (cat content stays flush; panel area is transparent until hover) so that hover
-      // expand/collapse never has to resize. The renderer keeps the cat anchored at the docked edge,
-      // so this one-time grow doesn't move the visible cat.
-      docked190 = { x: tx, y: ty, width: WIN_W, height: WIN_H }
-      const exp = computeExpanded(docked190, edge)
+      docked190 = d190
       dockedBounds = exp.bounds
       dockedCatOffset = exp.catOffset
       currentlyExpanded = false
       win.setBounds(exp.bounds)
       win.setIgnoreMouseEvents(true, { forward: true })
-      // tell the renderer the docked layout (cat at its cell via catOffset, panel CLOSED)
-      win.webContents.send('window:expanded', { expanded: false, edge, catOffset: exp.catOffset })
-      if (!win.isDestroyed()) win.webContents.send('anchor:changed', edge)
       snapping = false
-      // cat content screen position is unchanged by the grow (still flush at the edge)
-      if (latestCatRect.w > 0) {
-        dlog('cat:screen', {
-          x: Math.round(tx + latestCatRect.x), y: Math.round(ty + latestCatRect.y),
-          w: Math.round(latestCatRect.w), h: Math.round(latestCatRect.h)
-        })
-      }
-      dlog('snap:done', { target: { x: tx, y: ty }, expanded: exp.bounds, edge, catOffset: exp.catOffset })
+      // cat content screen position after dock = the flush position (tx+sc within the cell)
+      dlog('cat:screen', { x: Math.round(tx + sc.x), y: Math.round(ty + sc.y), w: Math.round(sc.w), h: Math.round(sc.h) })
+      dlog('snap:done', { target: d190, expanded: exp.bounds, edge, catOffset: exp.catOffset })
     }
   }, 16)
 }
