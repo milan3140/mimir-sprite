@@ -69,8 +69,17 @@ def check(name: str, ok: bool, detail: str = "") -> None:
     print(("PASS " if ok else "FAIL "), name, ("- " + detail) if detail else "")
 
 
-def grab_cat(ghost, scale, attempts: int = 3) -> bool:
+def grab_cat(ghost, scale, wa: dict, attempts: int = 4) -> bool:
     for _ in range(attempts):
+        cx, cy = cat_center_dip()
+        # approach from a NEUTRAL spot diagonally away from the cat so the window first COLLAPSES
+        # (clean state), then hover -> expand -> mousedown. Without this, a cursor left on the cat
+        # from the previous cycle makes the expand/mousedown handshake ambiguous and the grab misses.
+        nx = wa["x"] + (wa["width"] - 60 if cx - wa["x"] < wa["width"] / 2 else 60)
+        ny = wa["y"] + (wa["height"] - 60 if cy - wa["y"] < wa["height"] / 2 else 60)
+        away = g.to_physical(nx, ny, scale)
+        g.move_ghosted(ghost, away[0], away[1], dur=0.3)
+        time.sleep(0.5)
         cx, cy = cat_center_dip()
         p = g.to_physical(cx, cy, scale)
         exp_prev = count("window:expand")
@@ -121,7 +130,7 @@ def main() -> int:
 
         for edge in ["right", "top", "left", "bottom"]:
             # 1) dock cat to this edge
-            if not grab_cat(ghost, scale):
+            if not grab_cat(ghost, scale, wa):
                 check(f"[{edge}] grabbed cat", False)
                 continue
             sd_prev = count("snap:done")

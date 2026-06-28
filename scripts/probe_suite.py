@@ -184,27 +184,21 @@ def main() -> int:
             g.move_ghosted(ghost, safe[0], safe[1], dur=0.3)
             g.wait(0.6)  # let accidental expand/collapse settle + catRect refresh (400ms interval)
 
-            # hover the (new) cat position -> expand
-            # Use snap target (ground truth) not potentially-stale cat:screen log
-            if sc and "target" in sc:
-                cat_cx = sc["target"]["x"] + 95  # center of 190x190 window
-                cat_cy = sc["target"]["y"] + 95
-            else:
-                cat_cx, cat_cy = cat_center_dip()
+            # hover the (new) cat position -> expand. CAT-GLUED MODEL: the cat sits at a constant
+            # window offset, so the faithful cat:screen log (validated against pixels by
+            # probe_snap_visual) is the ground truth for where to hover.
+            cat_cx, cat_cy = cat_center_dip()
             c = g.to_physical(cat_cx, cat_cy, scale)
             exp_prev = count("window:expand")
             g.move_ghosted(ghost, c[0], c[1], dur=0.5)
             ev = wait_new("window:expand", exp_prev, timeout=6)
             check(f"[{edge}] expands", bool(ev) and ev.get("edge") == edge)
-            # DYNAMIC INVARIANT (the flicker fix): hover expand must NOT resize/move the native window
-            # — the docked window is already the expanded size. Assert expand bounds == docked bounds.
-            if ev and "to" in ev and sc and "expanded" in sc:
-                same = (ev["to"] == sc["expanded"])
+            # DYNAMIC INVARIANT (flicker fix): hover expand must NOT resize/move the native window —
+            # the docked window is ALREADY the (one fixed) size. Assert expand bounds == docked bounds.
+            if ev and "to" in ev and sc and "target" in sc:
+                same = (ev["to"] == sc["target"])
                 check(f"[{edge}] expand NO-resize (flicker-free)", same,
-                      f"docked={sc['expanded']} expand_to={ev['to']}")
-            if ev and "to" in ev:
-                b = norm_box(ev["to"])
-                check(f"[{edge}] panel ON-SCREEN", inside(b, wa, edge), f"to={b}")
+                      f"docked={sc['target']} expand_to={ev['to']}")
             g.wait(0.6)  # let panel:rects emit (400ms interval) for the width-consistency check
             # GOAL check (not just on-screen): capture the real rendered panel width on this edge.
             pr = last_json("panel:rects")

@@ -70,11 +70,21 @@ the renderer" (proxy for the 1-frame flash a log probe can't perceive).
 
 | Transition | assertion | Probe | Status |
 |---|---|---|---|
-| hover-expand   | docked bounds == expand bounds | `expand NO-resize` | OK |
-| hover-collapse | no setBounds on collapse | (collapse logs no bounds) | OK implicit |
-| grab/drag-start | drag window size > 190 (not shrunk) | `grab NO-resize` | OK (was the MISS) |
-| snap (dock) | deliberate animated motion - resize allowed | `snapped` | OK intended |
-| hide / restore | resize allowed (deliberate) | probe_nub | OK |
+| hover-expand   | docked bounds == expand bounds (no resize) | probe_suite `expand NO-resize` | OK |
+| hover-collapse | no setBounds on collapse | probe_suite (collapse) | OK |
+| grab/drag-start | drag window size == fixed size (not shrunk) | probe_suite `grab NO-resize` | OK |
+| **snap (dock)** | **cat centroid moves SMOOTHLY (no teleport): pixel max-jump <140, backtrack <90** | **probe_snap_visual `SMOOTH`** | **OK (was the 2nd MISS — log oracle was blind)** |
+| **dock flush** | **settled cat pixels flush to edge (gap −6..16px)** | **probe_snap_visual `FLUSH`** | **OK** |
+| hide / restore | nub on-screen + click restores | probe_nub | OK |
+
+**The fix for MISS #2's blind spot:** the snap/flush rows now assert on REAL PIXELS (probe_snap_visual:
+mss burst + bg-diff trajectory & flush gap), not on main's self-reported `cat:screen`. The log is main's
+own arithmetic — it cannot reveal a main↔renderer desync. Division of labour going forward: **log oracle
+(probe_suite) for static geometry that main fully owns** (panel width/centre/hug, no-resize); **pixel
+oracle (probe_snap_visual) for anything where the renderer's drawn position can diverge from main's model**
+(snap smoothness, edge flush). Measurement caveat logged in the probe: bg-diff under-detects the pale cat
+over a busy/low-contrast wallpaper (top/left can over-report ~10px); the reliable confirms are dark-bg
+edges + the now-faithful `cat:screen` (validated to match pixels within a few px on dark edges).
 
 Rule: when adding/altering ANY transition, add its row + assertion here BEFORE coding. "This resize
 is invisible" is an assumption -> must become an assertion, never a code comment.
