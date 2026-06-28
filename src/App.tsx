@@ -5,37 +5,37 @@ import { useAppStore } from './store/useAppStore'
 
 const CAT_W = 190 // must match WIN_W in windowManager
 const CAT_H = 190 // must match WIN_H in windowManager
-// peek-face dims — must match FACE_W/FACE_H/SIDE_W in windowManager
-const FACE_W = 74
-const FACE_H = 48
-const SIDE_W = 42
+// ear-strip dims — must match EAR_W/EAR_D in windowManager (aspect ≈ Cat-1-Peek 30:13 to avoid stretch)
+const EAR_W = 70
+const EAR_D = 30
 const peekImg = new URL('../assets/sprites/luizmelo/siamese/Cat-1-Peek.png', import.meta.url).href
 
-// When hidden, the window is a small strip at the docked screen edge showing a dedicated
-// "cat ears peeking" face. Click it to restore. top/bottom show the whole face; left/right show a
-// vertical slice peeking around the edge (the face's bottom is the "ledge" it peeks over).
+// When hidden, the window is a small strip at the docked screen edge showing just two cat ears,
+// their bases flush on the edge. The ears sprite points "up" (bases at the image bottom); we rotate
+// it per edge so the bases always hug the docked edge. Click to restore.
 function CatPeek({ edge }: { edge: string }) {
   const e = (edge as 'left' | 'right' | 'top' | 'bottom') ?? 'right'
-  // face fills FACE_W×FACE_H; the strip window crops it per edge (overflow hidden)
-  const face: React.CSSProperties = {
-    position: 'absolute', width: FACE_W, height: FACE_H, imageRendering: 'pixelated',
+  const rotate = ({ bottom: 0, top: 180, left: 90, right: -90 } as const)[e]
+
+  // ears render at EAR_W×EAR_D, centred in the strip and rotated so the base row lands on the edge.
+  const ears: React.CSSProperties = {
+    position: 'absolute', left: '50%', top: '50%', width: EAR_W, height: EAR_D,
+    transform: `translate(-50%, -50%) rotate(${rotate}deg)`,
+    imageRendering: 'pixelated',
     backgroundImage: `url("${peekImg}")`, backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat',
-  }
-  switch (e) {
-    case 'bottom': face.left = 0;             face.top = 0; break                       // whole face, ledge at bottom
-    case 'top':    face.left = 0;             face.top = 0; face.transform = 'scaleY(-1)'; break // flipped, ledge at top
-    case 'left':   face.left = SIDE_W - FACE_W; face.top = 0; break                     // right slice peeks in
-    case 'right':  face.left = 0;             face.top = 0; break                       // left slice peeks in
   }
 
   return (
     <div
-      className="relative w-full h-full overflow-hidden cursor-pointer cat-peek-bob"
-      style={{ background: 'transparent' }}
+      className="relative w-full h-full cursor-pointer"
+      // ~1/255 alpha (imperceptible) so Windows hit-tests the WHOLE strip — fully-transparent
+      // pixels let clicks fall through even with setIgnoreMouseEvents(false), so the gaps between
+      // the ear triangles would otherwise swallow the restore click.
+      style={{ background: 'rgba(0,0,0,0.004)' }}
       onClick={() => window.api.windowRestore()}
       title="Click to show Mimir (Ctrl+Alt+Space)"
     >
-      <div style={face} />
+      <div style={ears} />
     </div>
   )
 }

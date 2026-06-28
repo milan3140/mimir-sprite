@@ -10,11 +10,10 @@ export const WIN_H = 190
 const PANEL_W = 200
 const PANEL_H = 360
 
-// When hidden, the sprite is replaced by a dedicated "cat ears peeking" face (Cat-1-Peek) at the
-// docked screen edge. Clicking it restores the sprite. These dims must match CatPeek in App.tsx.
-const FACE_W = 74  // peek face width  (top/bottom: full face shows)
-const FACE_H = 48  // peek face height
-const SIDE_W = 42  // side edges: how wide a slice of the upright face peeks around the vertical edge
+// When hidden, the sprite is replaced by two cat ears (Cat-1-Peek) whose bases sit flush on the
+// docked screen edge. Clicking them restores the sprite. Dims must match CatPeek in App.tsx.
+const EAR_W = 70  // ear span ALONG the edge
+const EAR_D = 30  // ear depth poking INTO the screen (perpendicular to the edge)
 
 let currentlyExpanded = false
 let currentEdge: AnchorEdge = 'right'
@@ -216,17 +215,17 @@ export function hideToNub(win: BrowserWindow): void {
   let nx = 0, ny = 0, nw = 0, nh = 0
   switch (currentEdge) {
     case 'bottom':
-      nw = FACE_W; nh = FACE_H
-      nx = clamp(Math.round(ccx - FACE_W / 2), wa.x, wa.x + wa.width - nw); ny = wa.y + wa.height - FACE_H; break
+      nw = EAR_W; nh = EAR_D
+      nx = clamp(Math.round(ccx - EAR_W / 2), wa.x, wa.x + wa.width - nw); ny = wa.y + wa.height - EAR_D; break
     case 'top':
-      nw = FACE_W; nh = FACE_H
-      nx = clamp(Math.round(ccx - FACE_W / 2), wa.x, wa.x + wa.width - nw); ny = wa.y; break
+      nw = EAR_W; nh = EAR_D
+      nx = clamp(Math.round(ccx - EAR_W / 2), wa.x, wa.x + wa.width - nw); ny = wa.y; break
     case 'left':
-      nw = SIDE_W; nh = FACE_H
-      nx = wa.x; ny = clamp(Math.round(ccy - FACE_H / 2), wa.y, wa.y + wa.height - nh); break
+      nw = EAR_D; nh = EAR_W
+      nx = wa.x; ny = clamp(Math.round(ccy - EAR_W / 2), wa.y, wa.y + wa.height - nh); break
     case 'right':
-      nw = SIDE_W; nh = FACE_H
-      nx = wa.x + wa.width - SIDE_W; ny = clamp(Math.round(ccy - FACE_H / 2), wa.y, wa.y + wa.height - nh); break
+      nw = EAR_D; nh = EAR_W
+      nx = wa.x + wa.width - EAR_D; ny = clamp(Math.round(ccy - EAR_W / 2), wa.y, wa.y + wa.height - nh); break
   }
 
   hidden = true
