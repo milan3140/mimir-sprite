@@ -15,14 +15,23 @@ const PANEL_H = 360
 const EAR_W = 70  // ear span ALONG the edge
 const EAR_D = 30  // ear depth poking INTO the screen (perpendicular to the edge)
 
+// HUG: must match App.tsx (panel shifted ~50% of the cat box's transparent padding toward the cat)
+const HUG_X = 32
+const HUG_Y = 37
+
 let currentlyExpanded = false
 let currentEdge: AnchorEdge = 'right'
-let collapsedBounds: Rectangle | null = null
 let snapping = false                       // true while the ~320ms snap animation runs
-let dockedBounds: Rectangle | null = null  // the FINAL docked (edge) collapsed bounds
+// FIXED-WINDOW MODEL: while docked the window is ALWAYS the EXPANDED size (so hover never resizes →
+// no flicker). dockedBounds = that expanded rect; docked190 = the small cat-only rect used for
+// dragging; dockedCatOffset = the cat box's in-window x offset (for top/bottom centring).
+let dockedBounds: Rectangle | null = null
+let docked190: Rectangle | null = null
+let dockedCatOffset = 0
 let dragging = false                       // true while mouse-drag is active
 let hidden = false                         // true while showing the edge nub
 let preHideBounds: Rectangle | null = null
+let didInitialDock = false                 // snap once on first cat:content so hover works at boot
 
 export function isExpanded(): boolean { return currentlyExpanded }
 export function isSnapping(): boolean { return snapping }
@@ -77,11 +86,16 @@ export function createWindow(): BrowserWindow {
   let pollCount = 0
 
   ipcMain.on('drag:start', (_e, catScreenRect?: { x: number; y: number; w: number; h: number }) => {
-    if (win.isDestroyed()) return
-    // ponytail: clear stale docked position so collapse won't jump to a previous edge
-    dockedBounds = null
-    // collapse before drag to avoid inflation
+    if (win.isDestroyed() || hidden) return
+    // close the panel (CSS only, no resize)
     if (currentlyExpanded) collapseWindow(win)
+    // FIXED-WINDOW MODEL: the docked window is the EXPANDED size. Shrink to the 190 cat-only window
+    // for dragging — docked190 had the cat content flush at the same screen spot, so the visible cat
+    // doesn't move. Tell the renderer to fill the 190 window (catOffset 0). Clear dockedBounds so a
+    // mid-drag collapse can't jump to a stale edge.
+    if (docked190) win.setBounds(docked190)
+    win.webContents.send('window:expanded', { expanded: false, edge: currentEdge, catOffset: 0 })
+    dockedBounds = null
 
     const cursor = screen.getCursorScreenPoint()
     const [wx, wy] = win.getPosition()
@@ -136,6 +150,12 @@ export function createWindow(): BrowserWindow {
           w: Math.round(rect.w), h: Math.round(rect.h)
         })
       }
+      // FIXED-WINDOW MODEL: dock once at boot so the window becomes the expanded size and hover never
+      // has to resize. Needs the cat rect (just arrived), so do it on the first cat:content.
+      if (!didInitialDock && !dragging && !snapping && !hidden && !currentlyExpanded && !win.isDestroyed()) {
+        didInitialDock = true
+        snapToNearestEdge(win)
+      }
     }
   })
 
@@ -151,61 +171,62 @@ export function createWindow(): BrowserWindow {
   return win
 }
 
-// --- Expand/Collapse: cat stays EXACTLY where it was, panel grows toward center ---
+// --- Expand/Collapse (FIXED-WINDOW MODEL) ---
+// While docked the window is ALREADY the expanded size (set on snap), so expand/collapse NEVER
+// resize or move the native window — they only toggle the panel and the renderer animates it via a
+// CSS transform/opacity disclosure. No native resize on the hover path → no native-vs-renderer frame
+// mismatch → no flicker/deform. (Research-validated; see CLAUDE.md red line.)
+
+// Given the 190 cat-only docked bounds (cat content flush at edge), compute the EXPANDED window
+// bounds + the cat box's in-window x offset (catOffset; for top/bottom horizontal centring).
+function computeExpanded(d190: Rectangle, edge: AnchorEdge): { bounds: Rectangle; catOffset: number } {
+  const { x: wx, y: wy } = d190
+  const wa = screen.getDisplayMatching(d190).workArea
+  const catCenterX = wx + WIN_W / 2
+  let bx = wx, by = wy, bw = WIN_W, bh = WIN_H
+  switch (edge) {
+    case 'right':  bx = wx - PANEL_W; by = wy; bw = WIN_W + PANEL_W; bh = PANEL_H; break
+    case 'left':   bx = wx; by = wy; bw = WIN_W + PANEL_W; bh = PANEL_H; break
+    case 'top':    bw = PANEL_W; bh = WIN_H + PANEL_H; by = wy; bx = catCenterX - PANEL_W / 2; break
+    case 'bottom': bw = PANEL_W; bh = WIN_H + PANEL_H; by = wy - PANEL_H; bx = catCenterX - PANEL_W / 2; break
+  }
+  // clamp the panel-growth axis on-screen; the docked-edge axis stays put (cat doesn't move)
+  if (edge === 'left' || edge === 'right') by = clamp(by, wa.y, wa.y + wa.height - bh)
+  else bx = clamp(bx, wa.x, wa.x + wa.width - bw)
+  bx = Math.round(bx); by = Math.round(by)
+  return { bounds: { x: bx, y: by, width: bw, height: bh }, catOffset: wx - bx }
+}
+
+// The panel's window-relative hit rect for the current docked edge (matches App.tsx panelStyle).
+// Used by the click-through poll to know when the cursor is over the panel (the window is always the
+// big expanded size, so "outside the window" is no longer the collapse trigger).
+export function getPanelHitRect(): Rectangle | null {
+  if (!dockedBounds) return null
+  const W = dockedBounds.width, H = dockedBounds.height
+  switch (currentEdge) {
+    case 'right':  return { x: HUG_X, y: 0, width: PANEL_W, height: H }
+    case 'left':   return { x: W - HUG_X - PANEL_W, y: 0, width: PANEL_W, height: H }
+    case 'top':    return { x: 0, y: WIN_H - HUG_Y, width: W, height: PANEL_H }
+    case 'bottom': return { x: 0, y: HUG_Y, width: W, height: PANEL_H }
+  }
+  return null
+}
 
 export function expandWindow(win: BrowserWindow): void {
-  // Never expand mid-snap or mid-drag; expand from the TRUE docked edge bounds — not getBounds(),
-  // which can be a mid-animation position. dockedBounds is set when the snap animation finishes.
-  if (win.isDestroyed() || currentlyExpanded || snapping || dragging || hidden) return
-  collapsedBounds = dockedBounds ?? win.getBounds()
-  const { x: wx, y: wy } = collapsedBounds
-  const wa = screen.getDisplayMatching(collapsedBounds).workArea
-
-  // The panel content area must be PANEL_W × PANEL_H on EVERY edge (consistent usable width).
-  // left/right: window = WIN_W + PANEL_W wide, panel beside the cat.
-  // top/bottom: window = PANEL_W wide (NOT WIN_W — that gave a too-narrow panel), panel above/below,
-  //   CENTRED on the cat (symmetric, not lopsided). The cat stays fixed regardless of where the
-  //   window lands: the renderer offsets the cat box by (catX - windowX) inside the window.
-  const catCenterX = wx + WIN_W / 2
-  let bx: number, by: number, bw: number, bh: number
-  switch (currentEdge) {
-    case 'right':
-      bx = wx - PANEL_W; by = wy; bw = WIN_W + PANEL_W; bh = PANEL_H; break
-    case 'left':
-      bx = wx; by = wy; bw = WIN_W + PANEL_W; bh = PANEL_H; break
-    case 'top':
-      bw = PANEL_W; bh = WIN_H + PANEL_H; by = wy; bx = catCenterX - PANEL_W / 2; break
-    case 'bottom':
-      bw = PANEL_W; bh = WIN_H + PANEL_H; by = wy - PANEL_H; bx = catCenterX - PANEL_W / 2; break
-  }
-
-  // Clamp ONLY the axis the panel grows along (always toward center → on-screen). The docked-edge
-  // axis must NOT be clamped — clamping it pulls the window (and cat) off the edge (#B displacement).
-  // For top/bottom the clamp can shift the WINDOW near a screen edge, but the cat stays fixed because
-  // the renderer re-derives the cat's in-window offset from catOffset below.
-  if (currentEdge === 'left' || currentEdge === 'right') {
-    by = clamp(by, wa.y, wa.y + wa.height - bh) // keep panel vertically on-screen; cat stays docked
-  } else {
-    bx = clamp(bx, wa.x, wa.x + wa.width - bw)
-  }
-  bx = Math.round(bx); by = Math.round(by)
-
-  // cat box's horizontal offset inside the expanded window (keeps the cat pinned to its real x)
-  const catOffset = wx - bx
+  // can't expand before the first dock (window must already be the expanded size)
+  if (win.isDestroyed() || currentlyExpanded || snapping || dragging || hidden || !dockedBounds) return
   currentlyExpanded = true
-  win.setBounds({ x: bx, y: by, width: bw, height: bh })
-  win.setIgnoreMouseEvents(false)
-  win.webContents.send('window:expanded', { expanded: true, edge: currentEdge, catOffset })
-  dlog('window:expand', { from: collapsedBounds, to: { x: bx, y: by, w: bw, h: bh }, edge: currentEdge, catOffset })
+  // NO setBounds — window is already expanded-size. Just open the panel (renderer CSS-animates it).
+  win.webContents.send('window:expanded', { expanded: true, edge: currentEdge, catOffset: dockedCatOffset })
+  dlog('window:expand', { to: dockedBounds, edge: currentEdge, catOffset: dockedCatOffset })
 }
 
 export function collapseWindow(win: BrowserWindow): void {
   if (win.isDestroyed() || !currentlyExpanded) return
   currentlyExpanded = false
-  if (collapsedBounds) win.setBounds(collapsedBounds) // restore exact pre-expand position
-  win.setIgnoreMouseEvents(true, { forward: true })
-  win.webContents.send('window:expanded', { expanded: false, edge: currentEdge })
-  dlog('window:collapse', { to: collapsedBounds, edge: currentEdge })
+  // NO setBounds — close the panel via CSS only. (clickThrough re-arms click-through per cursor.)
+  win.webContents.send('window:expanded', { expanded: false, edge: currentEdge, catOffset: dockedCatOffset })
+  dlog('window:collapse', { edge: currentEdge })
 }
 
 // --- Hide to nub / restore ---
@@ -322,24 +343,29 @@ function snapToNearestEdge(win: BrowserWindow): void {
     if (Number.isFinite(x) && Number.isFinite(y)) win.setBounds({ x, y, width: WIN_W, height: WIN_H })
     if (frame >= frames) {
       clearInterval(snapInterval!); snapInterval = null
+      // FIXED-WINDOW MODEL: the 190 cat-only window is now flush at the edge. Grow it to the EXPANDED
+      // size in place (cat content stays flush; panel area is transparent until hover) so that hover
+      // expand/collapse never has to resize. The renderer keeps the cat anchored at the docked edge,
+      // so this one-time grow doesn't move the visible cat.
+      docked190 = { x: tx, y: ty, width: WIN_W, height: WIN_H }
+      const exp = computeExpanded(docked190, edge)
+      dockedBounds = exp.bounds
+      dockedCatOffset = exp.catOffset
+      currentlyExpanded = false
+      win.setBounds(exp.bounds)
+      win.setIgnoreMouseEvents(true, { forward: true })
+      // tell the renderer the docked layout (cat at its cell via catOffset, panel CLOSED)
+      win.webContents.send('window:expanded', { expanded: false, edge, catOffset: exp.catOffset })
+      if (!win.isDestroyed()) win.webContents.send('anchor:changed', edge)
       snapping = false
-      dockedBounds = { x: tx, y: ty, width: WIN_W, height: WIN_H } // canonical docked position
-      // ponytail: emit fresh cat:screen so probes/tools have accurate position after snap
+      // cat content screen position is unchanged by the grow (still flush at the edge)
       if (latestCatRect.w > 0) {
         dlog('cat:screen', {
           x: Math.round(tx + latestCatRect.x), y: Math.round(ty + latestCatRect.y),
           w: Math.round(latestCatRect.w), h: Math.round(latestCatRect.h)
         })
       }
-      // ponytail: snap animation sets WIN_W×WIN_H = collapsed; force-reset if stale
-      if (currentlyExpanded) {
-        currentlyExpanded = false
-        win.setIgnoreMouseEvents(true, { forward: true })
-        win.webContents.send('window:expanded', { expanded: false, edge })
-      }
-      const [ax, ay] = win.getPosition()
-      dlog('snap:done', { target: { x: tx, y: ty }, actual: { x: ax, y: ay }, edge })
-      if (!win.isDestroyed()) win.webContents.send('anchor:changed', edge)
+      dlog('snap:done', { target: { x: tx, y: ty }, expanded: exp.bounds, edge, catOffset: exp.catOffset })
     }
   }, 16)
 }

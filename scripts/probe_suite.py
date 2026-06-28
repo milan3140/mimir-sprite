@@ -188,6 +188,12 @@ def main() -> int:
             g.move_ghosted(ghost, c[0], c[1], dur=0.5)
             ev = wait_new("window:expand", exp_prev, timeout=6)
             check(f"[{edge}] expands", bool(ev) and ev.get("edge") == edge)
+            # DYNAMIC INVARIANT (the flicker fix): hover expand must NOT resize/move the native window
+            # — the docked window is already the expanded size. Assert expand bounds == docked bounds.
+            if ev and "to" in ev and sc and "expanded" in sc:
+                same = (ev["to"] == sc["expanded"])
+                check(f"[{edge}] expand NO-resize (flicker-free)", same,
+                      f"docked={sc['expanded']} expand_to={ev['to']}")
             if ev and "to" in ev:
                 b = norm_box(ev["to"])
                 check(f"[{edge}] panel ON-SCREEN", inside(b, wa, edge), f"to={b}")

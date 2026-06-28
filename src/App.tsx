@@ -64,45 +64,38 @@ export default function App() {
     </div>
   )
 
-  const slideAnim = ({
-    right: 'panel-slide-right',
-    left:  'panel-slide-left',
-    top:   'panel-slide-top',
-    bottom:'panel-slide-bottom',
-  } as const)[anchorEdge]
-
   // HUG: ~50% of the cat box's transparent padding on the panel side (~64h / ~74v) — pulls the
   // panel toward the visible cat so it doesn't look far away.
   const HUG_X = 32
   const HUG_Y = 37
 
-  // UNIFIED LAYOUT (collapsed + expanded share one tree → no React-tree switch, so the cat never
-  // flashes during the window resize). The cat box is ABSOLUTELY anchored to the docked edge, whose
-  // screen position is fixed across expand/collapse (the panel grows toward centre, the docked edge
-  // stays put), so resizing the window cannot move the cat. The panel is an absolute layer rendered
-  // only when expanded; for top/bottom the cat box uses catOffset (its true x inside the window).
+  // FIXED-WINDOW MODEL (flicker-free): while docked the window is ALWAYS the expanded size — the cat
+  // box is absolutely anchored to the docked edge (flush) and the panel is ALWAYS MOUNTED. Expand/
+  // collapse never resizes the window; it just toggles `.is-open`, and the panel animates open via a
+  // GPU transform+opacity transition with transform-origin at the cat. No native resize on the hover
+  // path → no native-vs-renderer frame mismatch → no flicker/deform. (Research-validated approach.)
   const catBoxStyle = ({
     right:  { position: 'absolute', right: 0, top: 0, width: CAT_W, height: CAT_H },
     left:   { position: 'absolute', left: 0,  top: 0, width: CAT_W, height: CAT_H },
-    top:    { position: 'absolute', top: 0,    left: expanded ? catOffset : 0, width: CAT_W, height: CAT_H },
-    bottom: { position: 'absolute', bottom: 0, left: expanded ? catOffset : 0, width: CAT_W, height: CAT_H },
+    top:    { position: 'absolute', top: 0,    left: catOffset, width: CAT_W, height: CAT_H },
+    bottom: { position: 'absolute', bottom: 0, left: catOffset, width: CAT_W, height: CAT_H },
   })[anchorEdge] as React.CSSProperties
 
-  // panel area (absolute), shifted ~HUG toward the cat to hug it; PANEL_W×PANEL_H content on every edge
+  // panel area (absolute), shifted ~HUG toward the cat to hug it; PANEL_W×PANEL_H content on every edge.
+  // transform-origin points AT the cat so the panel grows out of it.
   const panelStyle = ({
-    right:  { position: 'absolute', left: HUG_X,        top: 0, bottom: 0, width: PANEL_W },
-    left:   { position: 'absolute', right: HUG_X,       top: 0, bottom: 0, width: PANEL_W },
-    top:    { position: 'absolute', top: CAT_H - HUG_Y, left: 0, right: 0, height: PANEL_H },
-    bottom: { position: 'absolute', top: HUG_Y,         left: 0, right: 0, height: PANEL_H },
+    right:  { position: 'absolute', left: HUG_X,        top: 0, bottom: 0, width: PANEL_W, transformOrigin: 'right center' },
+    left:   { position: 'absolute', right: HUG_X,       top: 0, bottom: 0, width: PANEL_W, transformOrigin: 'left center' },
+    top:    { position: 'absolute', top: CAT_H - HUG_Y, left: 0, right: 0, height: PANEL_H, transformOrigin: 'center top' },
+    bottom: { position: 'absolute', top: HUG_Y,         left: 0, right: 0, height: PANEL_H, transformOrigin: 'center bottom' },
   })[anchorEdge] as React.CSSProperties
 
   return (
     <div className="w-screen h-screen overflow-hidden bg-transparent relative">
-      {expanded && (
-        <div className={slideAnim} style={panelStyle}>
-          <TodoPanel edge={anchorEdge} />
-        </div>
-      )}
+      {/* panel ALWAYS mounted; `.is-open` drives the CSS disclosure (no remount, no reflow jump) */}
+      <div className={`panel-disclosure ${expanded ? 'is-open' : ''}`} style={panelStyle}>
+        <TodoPanel edge={anchorEdge} />
+      </div>
       <div style={catBoxStyle}>
         <SpriteAvatar />
       </div>
