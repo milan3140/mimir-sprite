@@ -4,8 +4,17 @@ import { writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { dlog } from './debugLog'
 
-// TEST-CONTROL CHANNEL (enabled by MIMIR_TEST_CONTROL=1) — lets a probe drive the app WITHOUT the OS
-// cursor or a screen grab, so tests run on a hidden/inactive desktop while the user keeps working:
+// ⚠️ FIDELITY CAVEAT (important): injected input is NOT a faithful substitute for a real mouse. A real
+// grab/click goes OS cursor → Windows hit-test → setIgnoreMouseEvents (click-through) → renderer.
+// sendInputEvent BYPASSES the click-through layer and the injected cursor BYPASSES GetCursorPos, so an
+// inject-driven test PASSES even if a real mouse couldn't grab/click (exactly the clickThrough-desync /
+// cat-box-overlap bugs we had). So DO NOT use this channel to test "can the mouse grab/click it" — use
+// run_isolated.py (real OS mouse on an active separate desktop) for that. This channel is for
+// NON-cursor uses only: capturePage screenshots (faithful) + driving app logic that doesn't depend on
+// OS hit-testing.
+//
+// TEST-CONTROL CHANNEL (enabled by MIMIR_TEST_CONTROL=1) — drive app logic / capture without the OS
+// cursor or a screen grab (e.g. for headless logic checks):
 //   - injected cursor: clickThrough + drag read getInjectedCursor() instead of GetCursorPos, so hover/
 //     expand/drag work with NO real mouse movement (the user's cursor is never touched).
 //   - sendInputEvent: synthetic mouseDown/Up + char are dispatched straight into the renderer (fires the
