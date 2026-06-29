@@ -18,7 +18,7 @@ import { clampPanel } from '../shared/geometry'
 // (height for left/right, width for top/bottom) grows symmetrically (factor 2 so the grip tracks the
 // cursor); the other grows from the cat-side edge. Live size updates instantly via the store; the
 // persist (panelResize IPC) happens once on release so we don't write the DB every pixel. ---
-function ResizeGrip({ edge }: { edge: string }) {
+export function ResizeGrip({ edge }: { edge: string }) {
   const w0 = useAppStore(s => s.panelW)
   const h0 = useAppStore(s => s.panelH)
   const setLive = useAppStore(s => s.setLivePanel)
@@ -52,11 +52,13 @@ function ResizeGrip({ edge }: { edge: string }) {
     window.addEventListener('mouseup', onUp)
   }
 
+  // rendered in the panel WRAPPER (not the overflow-hidden card), so it can poke ~10px BEYOND the
+  // panel corner — a bigger invisible hit ring that's easier to grab.
   const pos = ({
-    right:  { bottom: 1, left: 1, cursor: 'nesw-resize' },
-    left:   { bottom: 1, right: 1, cursor: 'nwse-resize' },
-    top:    { bottom: 1, right: 1, cursor: 'nwse-resize' },
-    bottom: { top: 1, right: 1, cursor: 'nesw-resize' },
+    right:  { bottom: -10, left: -10, cursor: 'nesw-resize' },
+    left:   { bottom: -10, right: -10, cursor: 'nwse-resize' },
+    top:    { bottom: -10, right: -10, cursor: 'nwse-resize' },
+    bottom: { top: -10, right: -10, cursor: 'nesw-resize' },
   } as Record<string, React.CSSProperties>)[edge]
 
   return (
@@ -328,7 +330,7 @@ function usePanelRects(panelRef: React.RefObject<HTMLDivElement | null>, expande
       rects.mm = (window as unknown as { __mm?: number }).__mm || 0   // global mousemove count (probe diag)
       const lp = useAppStore.getState().livePanel
       if (lp) rects.live = lp
-      const grip = panel.querySelector('[data-resize-grip]') as HTMLElement | null
+      const grip = document.querySelector('[data-resize-grip]') as HTMLElement | null  // now a panel-wrapper sibling
       if (grip) rects.grip = toScreen(grip.getBoundingClientRect()) // resize-handle screen rect (probe)
       // rows + their buttons
       const rows: Record<string, unknown>[] = []
@@ -421,7 +423,6 @@ export function TodoPanel({ edge }: { edge: string }) {
            // ponytail: NO box-shadow — transparent window clips it into ugly half-shadow (#6)
            position: 'relative',
          }}>
-      <ResizeGrip edge={edge} />
       {/* Top bar */}
       <div className="flex items-center justify-between px-2 py-1.5"
            style={{ borderBottom: '1px solid var(--border)' }}>

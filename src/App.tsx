@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { SpriteAvatar } from './components/SpriteAvatar'
-import { TodoPanel } from './components/TodoPanel'
+import { TodoPanel, ResizeGrip } from './components/TodoPanel'
 import { useAppStore } from './store/useAppStore'
 // Shared geometry — ONE source of truth with the main process (windowManager). Never redeclare here.
 import { CELL, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D } from './shared/geometry'
@@ -95,6 +95,9 @@ export default function App() {
       {/* panel ALWAYS mounted; `.is-open` drives the CSS disclosure (no remount, no reflow jump) */}
       <div className={`panel-disclosure ${expanded ? 'is-open' : ''}`} style={panelStyle}>
         <TodoPanel edge={anchorEdge} />
+        {/* resize grip lives here (not inside the overflow-hidden card) so its hit-ring can extend
+            slightly BEYOND the panel corner — a bigger, easier grab target. */}
+        <ResizeGrip edge={anchorEdge} />
       </div>
       <div style={catBoxStyle}>
         <SpriteAvatar />

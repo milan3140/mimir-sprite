@@ -172,19 +172,25 @@ input:focus { box-shadow: 0 0 0 1px var(--ring) !important; }
 .detail-thumb-pending:hover .detail-thumb-x { opacity: 1; }
 .detail-meta { font-size: 10px; color: var(--fg-faint); letter-spacing: 0.02em; }
 
-/* ponytail: panel resize grip — small textured corner handle; drag to resize the whole panel. */
+/* ponytail: panel resize grip — drag to resize the whole panel. Big invisible hit area (28px, pokes
+   ~10px beyond the panel corner) with a small visible texture so it's easy to grab without looking
+   heavy. */
 .resize-grip {
   position: absolute;
-  width: 15px;
-  height: 15px;
+  width: 28px;
+  height: 28px;
   z-index: 20;
-  border-radius: 3px;
-  opacity: 0.3;
+  border-radius: 4px;
   touch-action: none;
+  /* the visible mark is a small corner texture; the rest of the 28px box is an invisible hit ring */
   background-image: repeating-linear-gradient(135deg, var(--fg-muted) 0 1px, transparent 1px 3px);
+  background-size: 13px 13px;
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0.32;
   transition: opacity 120ms ease, background-color 120ms ease;
 }
-.resize-grip:hover { opacity: 0.9; background-color: var(--surface-hover); }
+.resize-grip:hover { opacity: 0.95; background-color: var(--surface-hover); }
 
 /* ponytail: hidden cat peek — gentle bob so the poking-out ears look alive + draw the eye */
 @keyframes cat-peek-bob {

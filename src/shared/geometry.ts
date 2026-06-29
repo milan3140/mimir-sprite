@@ -10,8 +10,8 @@ export const MIN_PANEL_W = 230
 export const MIN_PANEL_H = 280
 export const DEFAULT_PANEL_W = 267
 export const DEFAULT_PANEL_H = 360
-export const MAX_PANEL_W = 400
-export const MAX_PANEL_H = 520
+export const MAX_PANEL_W = 560
+export const MAX_PANEL_H = 720
 
 export const WIN_W = CELL + 2 * MAX_PANEL_W   // 990 — ONE fixed window size (room for max panel either side)
 export const WIN_H = CELL + 2 * MAX_PANEL_H   // 1230

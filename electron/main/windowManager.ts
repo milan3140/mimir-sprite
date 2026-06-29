@@ -176,11 +176,15 @@ export function collapseWindow(win: BrowserWindow): void {
 export function getPanelHitRect(): Rectangle | null {
   if (!dockedBounds) return null
   const { w: PANEL_W, h: PANEL_H } = getPanelSize() // dynamic (user-resized); single source = the store
+  // small margin so the resize grip (which pokes ~10px beyond the panel corner) stays inside the
+  // interactive region — else a click on the grip's outer ring would fall through.
+  const M = 14
+  const grow = (r: Rectangle): Rectangle => ({ x: r.x - M, y: r.y - M, width: r.width + 2 * M, height: r.height + 2 * M })
   switch (currentEdge) {
-    case 'right':  return { x: CAT_X - PANEL_W + HUG_X, y: CAT_Y + CELL / 2 - PANEL_H / 2, width: PANEL_W, height: PANEL_H }
-    case 'left':   return { x: CAT_X + CELL - HUG_X,    y: CAT_Y + CELL / 2 - PANEL_H / 2, width: PANEL_W, height: PANEL_H }
-    case 'top':    return { x: CAT_X + CELL / 2 - PANEL_W / 2, y: CAT_Y + CELL - HUG_Y,    width: PANEL_W, height: PANEL_H }
-    case 'bottom': return { x: CAT_X + CELL / 2 - PANEL_W / 2, y: CAT_Y - PANEL_H + HUG_Y, width: PANEL_W, height: PANEL_H }
+    case 'right':  return grow({ x: CAT_X - PANEL_W + HUG_X, y: CAT_Y + CELL / 2 - PANEL_H / 2, width: PANEL_W, height: PANEL_H })
+    case 'left':   return grow({ x: CAT_X + CELL - HUG_X,    y: CAT_Y + CELL / 2 - PANEL_H / 2, width: PANEL_W, height: PANEL_H })
+    case 'top':    return grow({ x: CAT_X + CELL / 2 - PANEL_W / 2, y: CAT_Y + CELL - HUG_Y,    width: PANEL_W, height: PANEL_H })
+    case 'bottom': return grow({ x: CAT_X + CELL / 2 - PANEL_W / 2, y: CAT_Y - PANEL_H + HUG_Y, width: PANEL_W, height: PANEL_H })
   }
   return null
 }
