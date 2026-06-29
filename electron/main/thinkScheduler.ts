@@ -38,7 +38,7 @@ export function startThinkScheduler(win: BrowserWindow): void {
     const pick = candidates[Math.floor(Math.random() * candidates.length)]
     dlog('think:sched-fire', { id: pick.id, title: pick.title })
     running = true
-    try { await streamRealThinking(win, pick.title, pick.notes ?? '', fast ? 300 : 2200) }
+    try { await streamRealThinking(win, pick.title, pick.notes ?? '', fast ? 0.06 : 1) }
     finally { running = false }
   }
 

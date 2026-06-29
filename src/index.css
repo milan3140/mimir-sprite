@@ -219,7 +219,10 @@ input:focus { box-shadow: 0 0 0 1px var(--ring) !important; }
 .bubble-tail-top::after    { top: -6px;    left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-bottom-color: var(--bg-solid); }
 .bubble-tail-bottom::after { bottom: -6px; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--bg-solid); }
 @keyframes bubble-in { from { opacity: 0; transform: translateY(9px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
-@media (prefers-reduced-motion: reduce) { .bubble { animation-duration: 0ms; } }
+/* per-bubble fade-out: each bubble dies on its own timer (char-count dwell), not a global clear */
+.bubble-out { animation: bubble-out 400ms ease-in both; }
+@keyframes bubble-out { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-6px) scale(0.97); } }
+@media (prefers-reduced-motion: reduce) { .bubble, .bubble-out { animation-duration: 0ms; } }
 
 /* ponytail: hidden cat peek — gentle bob so the poking-out ears look alive + draw the eye */
 @keyframes cat-peek-bob {

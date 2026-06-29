@@ -76,6 +76,11 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('think:bubble', h)
     return () => { ipcRenderer.removeListener('think:bubble', h) }
   },
+  onThinkRemove: (cb: (idx: number) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, idx: number): void => { cb(idx) }
+    ipcRenderer.on('think:remove', h)
+    return () => { ipcRenderer.removeListener('think:remove', h) }
+  },
   onThinkClear: (cb: () => void) => {
     const h = (): void => { cb() }
     ipcRenderer.on('think:clear', h)

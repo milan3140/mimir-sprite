@@ -42,6 +42,7 @@ declare global {
       // M5 thinking bubbles
       thinkNow: (todoId: string) => Promise<void>
       onThinkBubble: (cb: (b: Bubble) => void) => () => void
+      onThinkRemove: (cb: (idx: number) => void) => () => void
       onThinkClear: (cb: () => void) => () => void
     }
   }

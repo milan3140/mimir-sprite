@@ -13,7 +13,7 @@ const TAG_COLOR: Record<BubbleTag, string> = {
 
 function SpeechBubble({ b, tail }: { b: Bubble; tail: string }) {
   return (
-    <div className={`bubble bubble-tail-${tail}`}>
+    <div className={`bubble bubble-tail-${tail}${b.fading ? ' bubble-out' : ''}`}>
       <span className="bubble-dot" style={{ background: TAG_COLOR[b.tag] }} />
       <span className="bubble-tag" style={{ color: TAG_COLOR[b.tag] }}>{b.tag}</span>
       <span className="bubble-text">{b.text}</span>

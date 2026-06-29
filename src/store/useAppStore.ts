@@ -22,10 +22,12 @@ interface AppStore {
   panelH: number
   livePanel: { w: number; h: number } | null   // transient size during a resize drag (not persisted)
   setLivePanel: (v: { w: number; h: number } | null) => void
-  // M5 thinking bubbles (transient, streamed from main)
+  // M5 thinking bubbles (transient, streamed from main; per-bubble independent lifecycle)
   bubbles: Bubble[]
   thinking: boolean
   pushBubble: (b: Bubble) => void
+  fadeBubble: (idx: number) => void
+  removeBubble: (idx: number) => void
   clearBubbles: () => void
   applySnapshot: (snap: StoreSnapshot) => void
 }
@@ -49,8 +51,13 @@ export const useAppStore = create<AppStore>((set) => ({
   setLivePanel: (v) => set({ livePanel: v }),
   bubbles: [],
   thinking: false,
-  // keep the last ~6 visible; older ones drop out of the stack
-  pushBubble: (b) => set((s) => ({ thinking: true, bubbles: [...s.bubbles, b].slice(-6) })),
+  // each bubble has its own lifecycle; cap at 8 as a safety backstop (independent fades usually keep ~3-4)
+  pushBubble: (b) => set((s) => ({ thinking: true, bubbles: [...s.bubbles.filter((x) => x.idx !== b.idx), b].slice(-8) })),
+  fadeBubble: (idx) => set((s) => ({ bubbles: s.bubbles.map((b) => (b.idx === idx ? { ...b, fading: true } : b)) })),
+  removeBubble: (idx) => set((s) => {
+    const left = s.bubbles.filter((b) => b.idx !== idx)
+    return { bubbles: left, thinking: left.length > 0 }
+  }),
   clearBubbles: () => set({ bubbles: [], thinking: false }),
   applySnapshot: (snap) => set({
     todos: snap.todos, appMode: snap.appState,

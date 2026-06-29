@@ -53,6 +53,8 @@ export default function App() {
   const PANEL_W = livePanel?.w ?? storeW
   const PANEL_H = livePanel?.h ?? storeH
   const pushBubble = useAppStore(s => s.pushBubble)
+  const fadeBubble = useAppStore(s => s.fadeBubble)
+  const removeBubble = useAppStore(s => s.removeBubble)
   const clearBubbles = useAppStore(s => s.clearBubbles)
   const applySnapshot = useAppStore(s => s.applySnapshot)
 
@@ -66,6 +68,11 @@ export default function App() {
   useEffect(() => window.api.onExpandedChanged(setExpandedState), [setExpandedState])
   useEffect(() => window.api.onHiddenChanged(setHiddenState), [setHiddenState])
   useEffect(() => window.api.onThinkBubble(pushBubble), [pushBubble])
+  // fade the bubble out (CSS), then drop it from the stack once the animation has played
+  useEffect(() => window.api.onThinkRemove((idx) => {
+    fadeBubble(idx)
+    setTimeout(() => removeBubble(idx), 420)
+  }), [fadeBubble, removeBubble])
   useEffect(() => window.api.onThinkClear(clearBubbles), [clearBubbles])
 
   // ponytail: nub mode — tiny tab, nothing else

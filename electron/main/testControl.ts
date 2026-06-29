@@ -91,11 +91,11 @@ async function handle(win: BrowserWindow, sock: Socket, line: string): Promise<v
   } else if (cmd === 'bounds') {
     sock.write(`OK ${b.x} ${b.y} ${b.width} ${b.height}\n`)
   } else if (cmd === 'think') {
-    streamMockThinking(win, args[0] ? +args[0] : 350) // fast pacing for probes
+    streamMockThinking(win, args[0] ? +args[0] : 0.06) // compressed timeScale for probes
     sock.write('OK\n')
   } else if (cmd === 'realthink') {
     // exercises the real ClaudeRunner→parse→stream pipeline (use with MIMIR_FAKE_CLAUDE=1 for no spend)
-    void streamRealThinking(win, rest || '測試任務', '', 280)
+    void streamRealThinking(win, rest || '測試任務', '', 0.06)
     sock.write('OK\n')
   } else if (cmd === 'addtodo') {
     await addTodo(rest || '測試待辦')

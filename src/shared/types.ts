@@ -10,6 +10,7 @@ export interface Bubble {
   tag: BubbleTag
   text: string
   sessionId?: string
+  fading?: boolean   // set when this bubble is told to fade out (drives the fade-out animation)
 }
 
 // Binary does NOT go in db.json — files live on disk under
