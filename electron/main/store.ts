@@ -3,6 +3,7 @@ import { join } from 'path'
 import { mkdirSync, existsSync, appendFileSync } from 'fs'
 import { dlog } from './debugLog'
 import { deleteAttachmentsForOwner } from './attachments'
+import { DEFAULT_PANEL_W, DEFAULT_PANEL_H, clampPanel } from '../../src/shared/geometry'
 import type { DB, Todo, AppMode, StoreSnapshot, Attachment } from '../../src/shared/types'
 
 // ponytail: lowdb v7 is ESM-only. We dynamic-import it at init time.
@@ -50,7 +51,7 @@ export async function initStore(listener: (snap: StoreSnapshot) => void): Promis
 
 function broadcast(): void {
   if (!db || !onChange) return
-  onChange({ todos: db.data.todos, appState: db.data.appState })
+  onChange({ todos: db.data.todos, appState: db.data.appState, panel: getPanelSize() })
 }
 
 async function save(): Promise<void> {
@@ -59,7 +60,21 @@ async function save(): Promise<void> {
 }
 
 export function getSnapshot(): StoreSnapshot {
-  return { todos: getTodos(), appState: getAppState() }
+  return { todos: getTodos(), appState: getAppState(), panel: getPanelSize() }
+}
+
+export function getPanelSize(): { w: number; h: number } {
+  const s = db?.data.settings
+  return clampPanel(s?.panelW ?? DEFAULT_PANEL_W, s?.panelH ?? DEFAULT_PANEL_H)
+}
+
+export async function setPanelSize(w: number, h: number): Promise<void> {
+  if (!db) return
+  const c = clampPanel(w, h)
+  db.data.settings.panelW = c.w
+  db.data.settings.panelH = c.h
+  await save(); broadcast()
+  dlog('panel:resize', c)
 }
 
 // --- Todo CRUD ---

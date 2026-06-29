@@ -53,6 +53,8 @@ export interface DB {
     position: { x: number; y: number }
     hidden: boolean
     alwaysOnTop: boolean
+    panelW?: number   // user-resized panel size (clamped to geometry MIN/MAX); default if absent
+    panelH?: number
   }
 }
 
@@ -60,4 +62,5 @@ export interface DB {
 export interface StoreSnapshot {
   todos: Todo[]
   appState: AppMode
+  panel: { w: number; h: number }   // current (possibly user-resized) panel size
 }

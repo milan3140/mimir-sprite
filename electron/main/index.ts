@@ -4,7 +4,7 @@ import { setupClickThrough } from './clickThrough'
 import { setupTray } from './tray'
 import { setupIpc, broadcastStore } from './ipc'
 import { initDebugLog } from './debugLog'
-import { initStore, getTodos, getAppState } from './store'
+import { initStore, getTodos, getAppState, getPanelSize } from './store'
 import { setupTestControl } from './testControl'
 
 // ponytail: disable-gpu-compositing prevents the Win11 transparent-window-renders-black bug
@@ -35,7 +35,7 @@ app.whenReady().then(async () => {
   // leaving the panel showing "No todos yet" until the first mutation. Re-push the snapshot
   // whenever the renderer (re)finishes loading, so it always has the current state on mount.
   w.webContents.on('did-finish-load', () =>
-    broadcastStore(w, { todos: getTodos(), appState: getAppState() })
+    broadcastStore(w, { todos: getTodos(), appState: getAppState(), panel: getPanelSize() })
   )
 })
 

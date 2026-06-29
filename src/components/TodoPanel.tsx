@@ -12,6 +12,53 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { Todo, Attachment } from '../shared/types'
+import { clampPanel } from '../shared/geometry'
+
+// --- Resize grip: drag to change the panel size (persisted). The dimension that's centred on the cat
+// (height for left/right, width for top/bottom) grows symmetrically (factor 2 so the grip tracks the
+// cursor); the other grows from the cat-side edge. Live size updates instantly via the store; the
+// persist (panelResize IPC) happens once on release so we don't write the DB every pixel. ---
+function ResizeGrip({ edge }: { edge: string }) {
+  const w0 = useAppStore(s => s.panelW)
+  const h0 = useAppStore(s => s.panelH)
+  const setLive = useAppStore(s => s.setLivePanel)
+
+  const onDown = (e: React.PointerEvent) => {
+    e.preventDefault(); e.stopPropagation()
+    const sx = e.screenX, sy = e.screenY
+    let last = { w: w0, h: h0 }
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.screenX - sx, dy = ev.screenY - sy
+      let dW = 0, dH = 0
+      if (edge === 'right') { dW = -dx; dH = 2 * dy }
+      else if (edge === 'left') { dW = dx; dH = 2 * dy }
+      else if (edge === 'top') { dW = 2 * dx; dH = dy }
+      else { dW = 2 * dx; dH = -dy }   // bottom
+      last = clampPanel(w0 + dW, h0 + dH)
+      setLive(last)
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.api.panelResize(last.w, last.h)
+      setLive(null)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }
+
+  const pos = ({
+    right:  { bottom: 1, left: 1, cursor: 'nesw-resize' },
+    left:   { bottom: 1, right: 1, cursor: 'nwse-resize' },
+    top:    { bottom: 1, right: 1, cursor: 'nwse-resize' },
+    bottom: { top: 1, right: 1, cursor: 'nesw-resize' },
+  } as Record<string, React.CSSProperties>)[edge]
+
+  return (
+    <div className="resize-grip" data-resize-grip style={pos}
+         onPointerDown={onDown} onClick={e => e.stopPropagation()} title="拖曳調整面板大小" />
+  )
+}
 
 // --- Paste-image helpers (M3b) ---
 
@@ -273,6 +320,8 @@ function usePanelRects(panelRef: React.RefObject<HTMLDivElement | null>, expande
         rects.addInputFocused = document.activeElement === addInput
       }
       rects.pendingThumbs = panel.querySelectorAll('[data-pending-thumbs] img').length // queued pasted screenshots
+      const grip = panel.querySelector('[data-resize-grip]') as HTMLElement | null
+      if (grip) rects.grip = toScreen(grip.getBoundingClientRect()) // resize-handle screen rect (probe)
       // rows + their buttons
       const rows: Record<string, unknown>[] = []
       panel.querySelectorAll('[data-todo-id]').forEach(el => {
@@ -362,7 +411,9 @@ export function TodoPanel({ edge }: { edge: string }) {
            border: '1px solid var(--border)',
            borderRadius: 'var(--radius)',
            // ponytail: NO box-shadow — transparent window clips it into ugly half-shadow (#6)
+           position: 'relative',
          }}>
+      <ResizeGrip edge={edge} />
       {/* Top bar */}
       <div className="flex items-center justify-between px-2 py-1.5"
            style={{ borderBottom: '1px solid var(--border)' }}>

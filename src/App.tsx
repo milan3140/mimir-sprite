@@ -3,7 +3,7 @@ import { SpriteAvatar } from './components/SpriteAvatar'
 import { TodoPanel } from './components/TodoPanel'
 import { useAppStore } from './store/useAppStore'
 // Shared geometry — ONE source of truth with the main process (windowManager). Never redeclare here.
-import { CELL, PANEL_W, PANEL_H, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D } from './shared/geometry'
+import { CELL, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D } from './shared/geometry'
 
 // UNIFIED FIXED-WINDOW, CAT-GLUED MODEL (see TEST_DESIGN.md §6): ONE fixed window size; the cat cell
 // sits at a CONSTANT position (CAT_X, CAT_Y) on every edge — only the panel moves per edge.
@@ -46,6 +46,11 @@ export default function App() {
   const hiddenEdge = useAppStore(s => s.hiddenEdge)
   const setHiddenState = useAppStore(s => s.setHiddenState)
   const anchorEdge = useAppStore(s => s.anchorEdge)
+  const storeW = useAppStore(s => s.panelW)    // user-resizable (persisted); main getPanelHitRect agrees
+  const storeH = useAppStore(s => s.panelH)
+  const livePanel = useAppStore(s => s.livePanel)  // transient size while dragging the resize handle
+  const PANEL_W = livePanel?.w ?? storeW
+  const PANEL_H = livePanel?.h ?? storeH
   const applySnapshot = useAppStore(s => s.applySnapshot)
 
   useEffect(() => window.api.onStoreChanged(applySnapshot), [applySnapshot])

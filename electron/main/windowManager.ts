@@ -2,7 +2,8 @@ import { BrowserWindow, screen, ipcMain, Rectangle } from 'electron'
 import { join } from 'path'
 import { dlog } from './debugLog'
 import { getInjectedCursor } from './testControl'
-import { CELL, PANEL_W, PANEL_H, WIN_W, WIN_H, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D } from '../../src/shared/geometry'
+import { CELL, WIN_W, WIN_H, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D } from '../../src/shared/geometry'
+import { getPanelSize } from './store'
 
 // cursor source: injected (test-control, no OS mouse) when present, else the real OS cursor
 function cursorPoint(): { x: number; y: number } {
@@ -174,6 +175,7 @@ export function collapseWindow(win: BrowserWindow): void {
 // The panel's window-relative hit rect for the current docked edge (must match App.tsx panelStyle).
 export function getPanelHitRect(): Rectangle | null {
   if (!dockedBounds) return null
+  const { w: PANEL_W, h: PANEL_H } = getPanelSize() // dynamic (user-resized); single source = the store
   switch (currentEdge) {
     case 'right':  return { x: CAT_X - PANEL_W + HUG_X, y: CAT_Y + CELL / 2 - PANEL_H / 2, width: PANEL_W, height: PANEL_H }
     case 'left':   return { x: CAT_X + CELL - HUG_X,    y: CAT_Y + CELL / 2 - PANEL_H / 2, width: PANEL_W, height: PANEL_H }

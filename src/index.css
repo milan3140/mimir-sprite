@@ -172,6 +172,20 @@ input:focus { box-shadow: 0 0 0 1px var(--ring) !important; }
 .detail-thumb-pending:hover .detail-thumb-x { opacity: 1; }
 .detail-meta { font-size: 10px; color: var(--fg-faint); letter-spacing: 0.02em; }
 
+/* ponytail: panel resize grip — small textured corner handle; drag to resize the whole panel. */
+.resize-grip {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  z-index: 20;
+  border-radius: 3px;
+  opacity: 0.3;
+  touch-action: none;
+  background-image: repeating-linear-gradient(135deg, var(--fg-muted) 0 1px, transparent 1px 3px);
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+.resize-grip:hover { opacity: 0.9; background-color: var(--surface-hover); }
+
 /* ponytail: hidden cat peek — gentle bob so the poking-out ears look alive + draw the eye */
 @keyframes cat-peek-bob {
   0%, 100% { transform: translateY(0); }

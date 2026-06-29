@@ -3,7 +3,7 @@ import { dlog } from './debugLog'
 import { hideToNub, restoreFromNub } from './windowManager'
 import {
   getTodos, getAppState, getSnapshot, addTodo, updateTodo, removeTodo,
-  reorderTodos, startTodo, pauseTodo, completeTodo, setMode, addAttachmentToTodo
+  reorderTodos, startTodo, pauseTodo, completeTodo, setMode, addAttachmentToTodo, setPanelSize
 } from './store'
 import { saveImageAttachment, readAttachmentDataUrl } from './attachments'
 import type { StoreSnapshot } from '../../src/shared/types'
@@ -29,6 +29,9 @@ export function setupIpc(win: BrowserWindow): void {
   })
   // read an attachment file back as a data URL (for rendering thumbnails after reload)
   ipcMain.handle('attachment:read', (_e, relPath: string) => readAttachmentDataUrl(relPath))
+
+  // user dragged the panel resize handle (clamped to geometry MIN/MAX, persisted)
+  ipcMain.handle('panel:resize', (_e, w: number, h: number) => setPanelSize(w, h))
 
   ipcMain.on('window:hide', () => hideToNub(win))
   ipcMain.on('window:restore', () => restoreFromNub(win))
