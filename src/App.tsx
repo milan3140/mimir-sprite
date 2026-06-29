@@ -1,10 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { SpriteAvatar } from './components/SpriteAvatar'
 import { TodoPanel, ResizeGrip } from './components/TodoPanel'
 import { SpeechBubbleStack } from './components/SpeechBubbles'
 import { useAppStore } from './store/useAppStore'
 // Shared geometry — ONE source of truth with the main process (windowManager). Never redeclare here.
-import { CELL, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D } from './shared/geometry'
+import { CELL, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D, panelClamp } from './shared/geometry'
 
 // UNIFIED FIXED-WINDOW, CAT-GLUED MODEL (see TEST_DESIGN.md §6): ONE fixed window size; the cat cell
 // sits at a CONSTANT position (CAT_X, CAT_Y) on every edge — only the panel moves per edge.
@@ -57,6 +57,8 @@ export default function App() {
   const removeBubble = useAppStore(s => s.removeBubble)
   const clearBubbles = useAppStore(s => s.clearBubbles)
   const applySnapshot = useAppStore(s => s.applySnapshot)
+  // window origin + work area (sent by main on expand) — lets us clamp a big panel into the work area
+  const [panelGeo, setPanelGeo] = useState<{ winX: number; winY: number; wa: { x: number; y: number; width: number; height: number } } | null>(null)
 
   useEffect(() => {
     const h = (): void => { (window as unknown as { __mm: number }).__mm = ((window as unknown as { __mm?: number }).__mm || 0) + 1 }
@@ -65,7 +67,10 @@ export default function App() {
   }, [])
   useEffect(() => window.api.onStoreChanged(applySnapshot), [applySnapshot])
   useEffect(() => { window.api.storeGet().then(applySnapshot) }, [applySnapshot])
-  useEffect(() => window.api.onExpandedChanged(setExpandedState), [setExpandedState])
+  useEffect(() => window.api.onExpandedChanged((v) => {
+    setExpandedState(v)
+    if (v.winX != null && v.wa) setPanelGeo({ winX: v.winX, winY: v.winY!, wa: v.wa })
+  }), [setExpandedState])
   useEffect(() => window.api.onHiddenChanged(setHiddenState), [setHiddenState])
   useEffect(() => window.api.onThinkBubble(pushBubble), [pushBubble])
   // fade the bubble out (CSS), then drop it from the stack once the animation has played
@@ -93,8 +98,14 @@ export default function App() {
 
   // panel (absolute, fixed size on every edge) positioned next to the constant cat cell, hugged, on the
   // screen-centre side. Matches getPanelHitRect() in windowManager. transform-origin points AT the cat.
-  const PV_TOP = CAT_Y + CELL / 2 - PANEL_H / 2   // vertical-centre on cat (left/right edges)
-  const PH_LEFT = CAT_X + CELL / 2 - PANEL_W / 2  // horizontal-centre on cat (top/bottom edges)
+  const PV_TOP0 = CAT_Y + CELL / 2 - PANEL_H / 2   // vertical-centre on cat (left/right edges)
+  const PH_LEFT0 = CAT_X + CELL / 2 - PANEL_W / 2  // horizontal-centre on cat (top/bottom edges)
+  // clamp a large panel into the work area so it never spills off-screen (same math as getPanelHitRect)
+  const off = panelGeo
+    ? panelClamp(anchorEdge, { top: PV_TOP0, left: PH_LEFT0, w: PANEL_W, h: PANEL_H }, { x: panelGeo.winX, y: panelGeo.winY }, panelGeo.wa)
+    : { dx: 0, dy: 0 }
+  const PV_TOP = PV_TOP0 + off.dy
+  const PH_LEFT = PH_LEFT0 + off.dx
   const panelStyle = ({
     right:  { position: 'absolute', left: CAT_X - PANEL_W + HUG_X, top: PV_TOP, width: PANEL_W, height: PANEL_H, transformOrigin: 'right center' },
     left:   { position: 'absolute', left: CAT_X + CELL - HUG_X,    top: PV_TOP, width: PANEL_W, height: PANEL_H, transformOrigin: 'left center' },

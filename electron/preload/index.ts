@@ -36,8 +36,8 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('store:changed', h)
     return () => { ipcRenderer.removeListener('store:changed', h) }
   },
-  onExpandedChanged: (cb: (v: { expanded: boolean; edge: string; catOffset?: number }) => void) => {
-    const h = (_e: Electron.IpcRendererEvent, v: { expanded: boolean; edge: string; catOffset?: number }): void => { cb(v) }
+  onExpandedChanged: (cb: (v: { expanded: boolean; edge: string; catOffset?: number; winX?: number; winY?: number; wa?: { x: number; y: number; width: number; height: number } }) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, v: { expanded: boolean; edge: string; catOffset?: number; winX?: number; winY?: number; wa?: { x: number; y: number; width: number; height: number } }): void => { cb(v) }
     ipcRenderer.on('window:expanded', h)
     return () => { ipcRenderer.removeListener('window:expanded', h) }
   },

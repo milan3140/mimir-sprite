@@ -4,7 +4,7 @@ import { writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { dlog } from './debugLog'
 import { streamMockThinking, streamRealThinking } from './thinking'
-import { addTodo } from './store'
+import { addTodo, setPanelSize } from './store'
 
 // ⚠️ FIDELITY CAVEAT (important): injected input is NOT a faithful substitute for a real mouse. A real
 // grab/click goes OS cursor → Windows hit-test → setIgnoreMouseEvents (click-through) → renderer.
@@ -99,6 +99,9 @@ async function handle(win: BrowserWindow, sock: Socket, line: string): Promise<v
     sock.write('OK\n')
   } else if (cmd === 'addtodo') {
     await addTodo(rest || '測試待辦')
+    sock.write('OK\n')
+  } else if (cmd === 'setpanel') {
+    await setPanelSize(+args[0], +args[1])
     sock.write('OK\n')
   } else if (cmd === 'shot') {
     const img = await win.webContents.capturePage()

@@ -28,3 +28,29 @@ export function clampPanel(w: number, h: number): { w: number; h: number } {
     h: Math.max(MIN_PANEL_H, Math.min(MAX_PANEL_H, Math.round(h))),
   }
 }
+
+// Keep a large panel inside the work area along its CROSS axis (the screen edge the cat is docked to),
+// so e.g. a tall panel docked near the top doesn't spill off the top of the screen. Returns {dx,dy} to
+// ADD to the panel's window-space position; only the cross-axis is non-zero — the hug-axis stays hugged
+// to the cat. Called by BOTH the renderer (panelStyle) and main (getPanelHitRect) with the SAME inputs,
+// so the visible panel and its hit-rect always agree (no dual-source drift).
+export function panelClamp(
+  edge: string,
+  win: { top: number; left: number; w: number; h: number },   // unclamped panel rect in WINDOW coords
+  origin: { x: number; y: number },                            // window's screen origin (top-left)
+  wa: { x: number; y: number; width: number; height: number }, // display work area (screen coords)
+  margin = 6
+): { dx: number; dy: number } {
+  if (edge === 'top' || edge === 'bottom') {
+    const left = origin.x + win.left
+    const right = left + win.w
+    if (left < wa.x + margin) return { dx: wa.x + margin - left, dy: 0 }
+    if (right > wa.x + wa.width - margin) return { dx: wa.x + wa.width - margin - right, dy: 0 }
+    return { dx: 0, dy: 0 }
+  }
+  const top = origin.y + win.top
+  const bottom = top + win.h
+  if (top < wa.y + margin) return { dx: 0, dy: wa.y + margin - top }
+  if (bottom > wa.y + wa.height - margin) return { dx: 0, dy: wa.y + wa.height - margin - bottom }
+  return { dx: 0, dy: 0 }
+}

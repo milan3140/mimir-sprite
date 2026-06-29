@@ -2,7 +2,7 @@ import { BrowserWindow, screen, ipcMain, Rectangle } from 'electron'
 import { join } from 'path'
 import { dlog } from './debugLog'
 import { getInjectedCursor } from './testControl'
-import { CELL, WIN_W, WIN_H, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D } from '../../src/shared/geometry'
+import { CELL, WIN_W, WIN_H, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D, panelClamp } from '../../src/shared/geometry'
 import { getPanelSize } from './store'
 
 // cursor source: injected (test-control, no OS mouse) when present, else the real OS cursor
@@ -161,7 +161,20 @@ function contentInWindow(): { x: number; y: number; w: number; h: number } {
 export function expandWindow(win: BrowserWindow): void {
   if (win.isDestroyed() || currentlyExpanded || snapping || dragging || hidden || !dockedBounds) return
   currentlyExpanded = true
-  win.webContents.send('window:expanded', { expanded: true, edge: currentEdge, catOffset: 0 })
+  // send the window origin + work area so the renderer can clamp a large panel into the work area
+  // with the SAME math as getPanelHitRect (no drift between the visible panel and its hit-rect).
+  const wa = screen.getDisplayMatching(dockedBounds).workArea
+  win.webContents.send('window:expanded', { expanded: true, edge: currentEdge, winX: dockedBounds.x, winY: dockedBounds.y, wa })
+  // log the clamped panel's SCREEN rect so probes can assert it stays within the work area
+  const ps = getPanelSize()
+  const base = basePanelRect(currentEdge, ps.w, ps.h)
+  const off = panelOffsetFor(ps.w, ps.h)
+  dlog('panel:clamp', {
+    edge: currentEdge, off,
+    waY: wa.y, waBottom: wa.y + wa.height, waX: wa.x, waRight: wa.x + wa.width,
+    screenTop: dockedBounds.y + base.y + off.dy, screenBottom: dockedBounds.y + base.y + off.dy + base.height,
+    screenLeft: dockedBounds.x + base.x + off.dx, screenRight: dockedBounds.x + base.x + off.dx + base.width,
+  })
   dlog('window:expand', { to: dockedBounds, edge: currentEdge })
 }
 
@@ -172,21 +185,35 @@ export function collapseWindow(win: BrowserWindow): void {
   dlog('window:collapse', { edge: currentEdge })
 }
 
+// The UNCLAMPED panel rect in window coords (centred/hugged on the cat). Mirrors App.tsx PV_TOP/PH_LEFT.
+function basePanelRect(edge: string, PANEL_W: number, PANEL_H: number): Rectangle {
+  switch (edge) {
+    case 'left':   return { x: CAT_X + CELL - HUG_X,          y: CAT_Y + CELL / 2 - PANEL_H / 2, width: PANEL_W, height: PANEL_H }
+    case 'top':    return { x: CAT_X + CELL / 2 - PANEL_W / 2, y: CAT_Y + CELL - HUG_Y,          width: PANEL_W, height: PANEL_H }
+    case 'bottom': return { x: CAT_X + CELL / 2 - PANEL_W / 2, y: CAT_Y - PANEL_H + HUG_Y,       width: PANEL_W, height: PANEL_H }
+    default:       return { x: CAT_X - PANEL_W + HUG_X,        y: CAT_Y + CELL / 2 - PANEL_H / 2, width: PANEL_W, height: PANEL_H } // right
+  }
+}
+
+// Work-area clamp offset for the current docked edge (keeps a big panel on-screen). Same inputs as the
+// renderer's clamp (dockedBounds origin + work area), so hit-rect and visible panel agree.
+function panelOffsetFor(PANEL_W: number, PANEL_H: number): { dx: number; dy: number } {
+  if (!dockedBounds) return { dx: 0, dy: 0 }
+  const wa = screen.getDisplayMatching(dockedBounds).workArea
+  const b = basePanelRect(currentEdge, PANEL_W, PANEL_H)
+  return panelClamp(currentEdge, { top: b.y, left: b.x, w: b.width, h: b.height }, { x: dockedBounds.x, y: dockedBounds.y }, wa)
+}
+
 // The panel's window-relative hit rect for the current docked edge (must match App.tsx panelStyle).
 export function getPanelHitRect(): Rectangle | null {
   if (!dockedBounds) return null
   const { w: PANEL_W, h: PANEL_H } = getPanelSize() // dynamic (user-resized); single source = the store
+  const b = basePanelRect(currentEdge, PANEL_W, PANEL_H)
+  const off = panelOffsetFor(PANEL_W, PANEL_H)
   // small margin so the resize grip (which pokes ~10px beyond the panel corner) stays inside the
   // interactive region — else a click on the grip's outer ring would fall through.
   const M = 14
-  const grow = (r: Rectangle): Rectangle => ({ x: r.x - M, y: r.y - M, width: r.width + 2 * M, height: r.height + 2 * M })
-  switch (currentEdge) {
-    case 'right':  return grow({ x: CAT_X - PANEL_W + HUG_X, y: CAT_Y + CELL / 2 - PANEL_H / 2, width: PANEL_W, height: PANEL_H })
-    case 'left':   return grow({ x: CAT_X + CELL - HUG_X,    y: CAT_Y + CELL / 2 - PANEL_H / 2, width: PANEL_W, height: PANEL_H })
-    case 'top':    return grow({ x: CAT_X + CELL / 2 - PANEL_W / 2, y: CAT_Y + CELL - HUG_Y,    width: PANEL_W, height: PANEL_H })
-    case 'bottom': return grow({ x: CAT_X + CELL / 2 - PANEL_W / 2, y: CAT_Y - PANEL_H + HUG_Y, width: PANEL_W, height: PANEL_H })
-  }
-  return null
+  return { x: b.x + off.dx - M, y: b.y + off.dy - M, width: b.width + 2 * M, height: b.height + 2 * M }
 }
 
 // --- Hide to nub / restore ---
