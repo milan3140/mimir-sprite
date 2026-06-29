@@ -321,6 +321,52 @@ def main() -> int:
         for edge in ["right", "top", "left", "bottom"]:
             test_edge(ghost, wa, edge)
 
+        # F4: collapse the panel WHILE a detail accordion is open -> must collapse cleanly and the
+        # detail state must persist (panel is always mounted), so re-expanding shows it still open.
+        if dock_and_expand(ghost, wa, "right"):
+            base_f4 = rows_now()
+            ids_before = {x["id"] for x in base_f4}
+            C0 = len(base_f4)
+            ai = add_input_rect()
+            click_dip(ghost, ai["x"] + ai["w"] / 2, ai["y"] + ai["h"] / 2)
+            time.sleep(0.2); paste("F4-detail"); pyautogui.press("enter")
+            r = wait_rows(lambda rs: len(rs) == C0 + 1)
+            fid = next((x["id"] for x in r if x["id"] not in ids_before), None)
+            if fid:
+                row = find_row(fid)
+                d0 = (row.get("detail") or {}).get("h", 0)
+                cc = btn_center(row, "chevron")
+                if cc:
+                    click_dip(ghost, *cc)
+                    wait_rows(lambda rs: ((find_or(rs, fid, "detail") or {}).get("h", 0) > d0 + 20))
+                    # collapse: move cursor far away, expect window:collapse, detail stays open in state
+                    col_prev = count("window:collapse")
+                    g.move_ghosted(ghost, *g.to_physical(wa["x"] + 60, wa["y"] + 60, SCALE), dur=0.4)
+                    collapsed = wait_new("window:collapse", col_prev, timeout=4) is not None
+                    check("[F4] collapse fires while detail open", collapsed)
+                    time.sleep(0.5)
+                    # re-expand: hover the cat again -> detail must still be open
+                    cx, cy = cat_center_dip()
+                    exp_prev = count("window:expand")
+                    g.move_ghosted(ghost, *g.to_physical(cx, cy, SCALE), dur=0.4)
+                    wait_new("window:expand", exp_prev, timeout=5)
+                    r2 = wait_rows(lambda rs: find_or(rs, fid, "detailOpen") in ("true", "false"), timeout=3)
+                    check("[F4] detail persists open after collapse+re-expand",
+                          find_or(r2, fid, "detailOpen") == "true",
+                          f"detailOpen={find_or(r2, fid, 'detailOpen')}")
+                    # cleanup: close detail + remove the row
+                    row = find_row(fid); cc = btn_center(row, "chevron")
+                    if cc:
+                        click_dip(ghost, *cc)
+                    row = find_row(fid)
+                    hx = row["rect"]["x"] + 30; hy = row["rect"]["y"] + row["rect"]["h"] / 2
+                    g.move_ghosted(ghost, *g.to_physical(hx, hy, SCALE), dur=0.3)
+                    wait_rows(lambda rs: find_or(rs, fid, "delete") is not None, timeout=3)
+                    dc = btn_center(find_row(fid) or {}, "delete")
+                    if dc:
+                        click_dip(ghost, *dc)
+                        wait_rows(lambda rs: find_row_in(rs, fid) is None)
+
         npass = sum(1 for _, ok, _ in results if ok)
         print(f"\n[PANEL] {npass}/{len(results)} passed")
         (PROJECT / "state").mkdir(exist_ok=True)
