@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import {
-  Coffee, EyeOff, ChevronRight, ChevronDown, Play, Pause, Check, Brain, Trash2, Plus, X
+  Coffee, EyeOff, ChevronRight, ChevronDown, Play, Pause, Check, Brain, Trash2, Plus
 } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -44,9 +44,12 @@ function EditableTitle({ todo, onDone }: { todo: Todo; onDone: () => void }) {
   )
 }
 
-// --- Inline detail (in-flow, pushes rows down, full panel width) ---
+// --- Inline detail (animated accordion; in-flow, pushes rows down, full panel width) ---
+// No modal, no "Detail" header, no × — the row's left chevron is the only toggle. The open/close
+// height animation is pure CSS (grid-template-rows 0fr↔1fr) on the .detail-accordion wrapper, so the
+// rows below slide down/up smoothly with no measured JS height.
 
-function InlineDetail({ todo, onClose }: { todo: Todo; onClose: () => void }) {
+function InlineDetail({ todo }: { todo: Todo }) {
   const [notes, setNotes] = useState(todo.notes ?? '')
   const dirty = useRef(false)
 
@@ -69,14 +72,8 @@ function InlineDetail({ todo, onClose }: { todo: Todo; onClose: () => void }) {
       onClick={e => e.stopPropagation()}
       onPointerDown={e => e.stopPropagation()}
     >
-      <div className="flex items-center justify-between px-2 py-1" style={{ borderBottom: '1px solid var(--border)' }}>
-        <span className="text-xs font-medium" style={{ color: 'var(--fg)' }}>Detail</span>
-        <button onClick={onClose} className="hover:opacity-80" style={{ color: 'var(--fg-muted)' }} aria-label="Close">
-          <X size={12} />
-        </button>
-      </div>
-      {/* Full title — preserve multiline */}
-      <div className="px-2 py-1 text-xs break-words whitespace-pre-wrap" style={{ color: 'var(--fg)' }}>{todo.title}</div>
+      {/* Full title (multiline) — replaces the old header; chevron up in the row collapses this */}
+      <div className="px-2 pt-1.5 pb-1 text-xs break-words whitespace-pre-wrap" style={{ color: 'var(--fg)' }}>{todo.title}</div>
       {/* Editable notes */}
       <textarea
         value={notes}
@@ -172,8 +169,13 @@ function TodoRow({ todo }: { todo: Todo }) {
         </div>
       </div>
 
-      {/* ponytail: inline detail — in-flow, pushes rows down, full width */}
-      {detailOpen && <InlineDetail todo={todo} onClose={() => setDetailOpen(false)} />}
+      {/* ponytail: inline detail — ALWAYS mounted; .detail-accordion animates height (grid-rows
+          0fr↔1fr) so opening/closing smoothly pushes the rows below. data-open drives it. */}
+      <div className="detail-accordion" data-open={detailOpen} data-detail-for={todo.id}>
+        <div className="detail-accordion-inner">
+          <InlineDetail todo={todo} />
+        </div>
+      </div>
     </div>
   )
 }
@@ -191,8 +193,8 @@ function usePanelRects(panelRef: React.RefObject<HTMLDivElement | null>, expande
         x: Math.round(sx + r.x), y: Math.round(sy + r.y),
         w: Math.round(r.width), h: Math.round(r.height)
       })
-      // add-input
-      const addInput = panel.querySelector('textarea[placeholder]') as HTMLElement | null
+      // add-input (specific attr — the detail's Notes textarea also has a placeholder)
+      const addInput = panel.querySelector('textarea[data-add-input]') as HTMLElement | null
       const rects: Record<string, unknown> = {}
       rects.panel = toScreen(panel.getBoundingClientRect()) // panel card outer rect (for gap checks)
       if (addInput) rects.addInput = toScreen(addInput.getBoundingClientRect())
@@ -205,6 +207,12 @@ function usePanelRects(panelRef: React.RefObject<HTMLDivElement | null>, expande
           const name = (btn as HTMLElement).dataset.btn!
           entry[name] = toScreen(btn.getBoundingClientRect())
         })
+        // detail accordion (animated height; probe asserts it grows on open + pushes rows below)
+        const det = el.querySelector('.detail-accordion') as HTMLElement | null
+        if (det) {
+          entry.detail = toScreen(det.getBoundingClientRect())
+          entry.detailOpen = det.getAttribute('data-open')
+        }
         rows.push(entry)
       })
       rects.rows = rows
@@ -303,6 +311,7 @@ export function TodoPanel({ edge }: { edge: string }) {
       <div className="flex items-center gap-1 px-2 py-1.5"
            style={{ borderTop: '1px solid var(--border)' }}>
         <textarea
+          data-add-input
           value={newTitle}
           onChange={e => setNewTitle(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addTodo() } }}

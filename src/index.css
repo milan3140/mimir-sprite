@@ -96,6 +96,31 @@ input:focus { box-shadow: 0 0 0 1px var(--ring) !important; }
   .panel-disclosure, .panel-disclosure.is-open { transition-duration: 0ms; }
 }
 
+/* ponytail: todo DETAIL accordion — inline (no modal/header/×). The row's chevron toggles data-open;
+   height animates via the grid-template-rows 0fr↔1fr trick (smooth, no JS-measured height), so the
+   rows below slide down/up. opacity fades the content; pointer-events off while closed. */
+.detail-accordion {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 190ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.detail-accordion[data-open="true"] { grid-template-rows: 1fr; }
+.detail-accordion-inner {
+  overflow: hidden;
+  min-height: 0;                 /* required for the 0fr row to actually collapse */
+  opacity: 0;
+  transition: opacity 130ms ease;
+  pointer-events: none;
+}
+.detail-accordion[data-open="true"] .detail-accordion-inner {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 180ms ease 60ms;   /* fade in slightly after the height starts opening */
+}
+@media (prefers-reduced-motion: reduce) {
+  .detail-accordion, .detail-accordion-inner { transition-duration: 0ms; }
+}
+
 /* ponytail: hidden cat peek — gentle bob so the poking-out ears look alive + draw the eye */
 @keyframes cat-peek-bob {
   0%, 100% { transform: translateY(0); }
