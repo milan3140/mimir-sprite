@@ -23,11 +23,14 @@ function ResizeGrip({ edge }: { edge: string }) {
   const h0 = useAppStore(s => s.panelH)
   const setLive = useAppStore(s => s.setLivePanel)
 
-  const onDown = (e: React.PointerEvent) => {
+  // mouse events (NOT pointer events): a real mouse and the test channel's sendInputEvent both fire
+  // mousemove/up reliably; sendInputEvent does NOT reliably synthesize pointermove, so pointer events
+  // were untestable and could miss drags.
+  const onDown = (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation()
     const sx = e.screenX, sy = e.screenY
     let last = { w: w0, h: h0 }
-    const onMove = (ev: PointerEvent) => {
+    const onMove = (ev: MouseEvent) => {
       const dx = ev.screenX - sx, dy = ev.screenY - sy
       let dW = 0, dH = 0
       if (edge === 'right') { dW = -dx; dH = 2 * dy }
@@ -38,13 +41,13 @@ function ResizeGrip({ edge }: { edge: string }) {
       setLive(last)
     }
     const onUp = () => {
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
       window.api.panelResize(last.w, last.h)
       setLive(null)
     }
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
   }
 
   const pos = ({
@@ -56,7 +59,7 @@ function ResizeGrip({ edge }: { edge: string }) {
 
   return (
     <div className="resize-grip" data-resize-grip style={pos}
-         onPointerDown={onDown} onClick={e => e.stopPropagation()} title="拖曳調整面板大小" />
+         onMouseDown={onDown} onClick={e => e.stopPropagation()} title="拖曳調整面板大小" />
   )
 }
 
@@ -320,6 +323,9 @@ function usePanelRects(panelRef: React.RefObject<HTMLDivElement | null>, expande
         rects.addInputFocused = document.activeElement === addInput
       }
       rects.pendingThumbs = panel.querySelectorAll('[data-pending-thumbs] img').length // queued pasted screenshots
+      rects.mm = (window as unknown as { __mm?: number }).__mm || 0   // global mousemove count (probe diag)
+      const lp = useAppStore.getState().livePanel
+      if (lp) rects.live = lp
       const grip = panel.querySelector('[data-resize-grip]') as HTMLElement | null
       if (grip) rects.grip = toScreen(grip.getBoundingClientRect()) // resize-handle screen rect (probe)
       // rows + their buttons

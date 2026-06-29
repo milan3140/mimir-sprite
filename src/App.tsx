@@ -53,6 +53,11 @@ export default function App() {
   const PANEL_H = livePanel?.h ?? storeH
   const applySnapshot = useAppStore(s => s.applySnapshot)
 
+  useEffect(() => {
+    const h = (): void => { (window as unknown as { __mm: number }).__mm = ((window as unknown as { __mm?: number }).__mm || 0) + 1 }
+    window.addEventListener('mousemove', h)
+    return () => window.removeEventListener('mousemove', h)
+  }, [])
   useEffect(() => window.api.onStoreChanged(applySnapshot), [applySnapshot])
   useEffect(() => { window.api.storeGet().then(applySnapshot) }, [applySnapshot])
   useEffect(() => window.api.onExpandedChanged(setExpandedState), [setExpandedState])

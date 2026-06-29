@@ -76,6 +76,9 @@ async function handle(win: BrowserWindow, sock: Socket, line: string): Promise<v
     // dispatch a DOM mousemove at the window-relative point (for hover handlers / dnd-kit)
     const wx = Math.round((injected?.x ?? 0) - b.x)
     const wy = Math.round((injected?.y ?? 0) - b.y)
+    // NOTE: sendInputEvent mouseMove does NOT reliably dispatch a DOM mousemove here (verified: 0 DOM
+    // mousemoves for 20 sends), so the channel CANNOT drive drag-MOVE interactions (e.g. the panel
+    // resize grip). Use run_isolated (real mouse) to test drags. mouseDown/Up + capturePage do work.
     win.webContents.sendInputEvent({ type: 'mouseMove', x: wx, y: wy } as Electron.MouseInputEvent)
     sock.write('OK\n')
   } else if (cmd === 'key') {
