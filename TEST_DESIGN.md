@@ -40,11 +40,11 @@ cell must map to an automated probe assertion or be explicitly marked UNCOVERED.
 | F1 grab × expanded | re-hover mid-animation grabs stale bounds | probe_suite (grab→snap) | ✅ |
 | F11 hide × Edge×4 | ears off-screen (window hangs off edge) / not flush | probe_nub | ✅ 13/13 |
 | F12 restore × Edge×4 | ears in transparent gap → click falls through | probe_nub (click ears) | ✅ |
-| **F3 expand × hidden** | hover must NOT expand while showing ears | probe_nub (hover loop after hide) | ⚠️ implicit only |
-| **F11 hide × expanded** | must collapse first, then ears (not ears over panel) | — | ❌ UNCOVERED |
-| **F12 restore → F3** | after restore, hover-expand must work again | probe_nub restores, then next grab | ⚠️ partial |
+| F3 expand × hidden | hover must NOT expand while showing ears | probe_overlap (hover-while-hidden) | ✅ |
+| F11 hide × expanded | must collapse first, then ears (not ears over panel) | probe_overlap (hide-from-expanded) | ✅ |
+| F12 restore → F3 | after restore, hover-expand must work again | probe_overlap (restore→hover) | ✅ |
 | **F5/F6/F8/F9/F10 CRUD × Edge×4** | panel buttons/rows reachable+working each edge | (planned panel-CRUD probe) | ❌ UNCOVERED |
-| **F7 detail × long-content × Edge** | inline detail pushes rows; panel must scroll, stay on-screen | — | ❌ UNCOVERED |
+| F7 detail × long-content × Edge | inline accordion pushes rows; stays in panel | probe_detail (right edge; opens 0→86, pushes 86px, within panel, closes) | ✅ right (×4 edges pending) |
 | **F4 collapse × F7 detail-open** | collapse while a detail is open | — | ❌ UNCOVERED |
 | F13 initial-load × first-open | items only appeared after first add (fixed) | manual/screenshot | ✅ fixed |
 
