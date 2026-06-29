@@ -3,6 +3,7 @@ import { createServer, Socket } from 'net'
 import { writeFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { dlog } from './debugLog'
+import { streamMockThinking } from './thinking'
 
 // ⚠️ FIDELITY CAVEAT (important): injected input is NOT a faithful substitute for a real mouse. A real
 // grab/click goes OS cursor → Windows hit-test → setIgnoreMouseEvents (click-through) → renderer.
@@ -88,6 +89,9 @@ async function handle(win: BrowserWindow, sock: Socket, line: string): Promise<v
     sock.write('OK\n')
   } else if (cmd === 'bounds') {
     sock.write(`OK ${b.x} ${b.y} ${b.width} ${b.height}\n`)
+  } else if (cmd === 'think') {
+    streamMockThinking(win, args[0] ? +args[0] : 350) // fast pacing for probes
+    sock.write('OK\n')
   } else if (cmd === 'shot') {
     const img = await win.webContents.capturePage()
     sock.write('OK ' + img.toPNG().toString('base64') + '\n')

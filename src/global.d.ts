@@ -1,4 +1,4 @@
-import type { Todo, StoreSnapshot, Attachment } from './shared/types'
+import type { Todo, StoreSnapshot, Attachment, Bubble } from './shared/types'
 
 declare global {
   interface Window {
@@ -39,6 +39,9 @@ declare global {
       attachmentRead: (relPath: string) => Promise<string | null>
       panelResize: (w: number, h: number) => Promise<void>
       setResizing: (v: boolean) => void
+      // M5 thinking bubbles
+      onThinkBubble: (cb: (b: Bubble) => void) => () => void
+      onThinkClear: (cb: () => void) => () => void
     }
   }
 }

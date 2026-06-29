@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Todo, AppMode, StoreSnapshot } from '../shared/types'
+import type { Todo, AppMode, StoreSnapshot, Bubble } from '../shared/types'
 import { DEFAULT_PANEL_W, DEFAULT_PANEL_H } from '../shared/geometry'
 
 type Edge = 'left' | 'right' | 'top' | 'bottom'
@@ -22,6 +22,11 @@ interface AppStore {
   panelH: number
   livePanel: { w: number; h: number } | null   // transient size during a resize drag (not persisted)
   setLivePanel: (v: { w: number; h: number } | null) => void
+  // M5 thinking bubbles (transient, streamed from main)
+  bubbles: Bubble[]
+  thinking: boolean
+  pushBubble: (b: Bubble) => void
+  clearBubbles: () => void
   applySnapshot: (snap: StoreSnapshot) => void
 }
 
@@ -42,6 +47,11 @@ export const useAppStore = create<AppStore>((set) => ({
   panelH: DEFAULT_PANEL_H,
   livePanel: null,
   setLivePanel: (v) => set({ livePanel: v }),
+  bubbles: [],
+  thinking: false,
+  // keep the last ~6 visible; older ones drop out of the stack
+  pushBubble: (b) => set((s) => ({ thinking: true, bubbles: [...s.bubbles, b].slice(-6) })),
+  clearBubbles: () => set({ bubbles: [], thinking: false }),
   applySnapshot: (snap) => set({
     todos: snap.todos, appMode: snap.appState,
     ...(snap.panel ? { panelW: snap.panel.w, panelH: snap.panel.h } : {}),

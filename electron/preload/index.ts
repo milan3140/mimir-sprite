@@ -68,4 +68,16 @@ contextBridge.exposeInMainWorld('api', {
   // Panel resize (M: drag handle)
   panelResize: (w: number, h: number) => ipcRenderer.invoke('panel:resize', w, h),
   setResizing: (v: boolean) => ipcRenderer.send('panel:resizing', v),
+
+  // M5 thinking bubbles (streamed from main)
+  onThinkBubble: (cb: (b: unknown) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, b: unknown): void => { cb(b) }
+    ipcRenderer.on('think:bubble', h)
+    return () => { ipcRenderer.removeListener('think:bubble', h) }
+  },
+  onThinkClear: (cb: () => void) => {
+    const h = (): void => { cb() }
+    ipcRenderer.on('think:clear', h)
+    return () => { ipcRenderer.removeListener('think:clear', h) }
+  },
 })

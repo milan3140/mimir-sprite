@@ -1,6 +1,7 @@
 import { BrowserWindow, Tray, Menu, globalShortcut, nativeImage, app } from 'electron'
 import { dlog } from './debugLog'
 import { isHidden, hideToNub, restoreFromNub } from './windowManager'
+import { streamMockThinking } from './thinking'
 
 let tray: Tray | null = null
 
@@ -25,6 +26,8 @@ export function setupTray(win: BrowserWindow): void {
   globalShortcut.register('Ctrl+Alt+Space', () => toggleVisibility(win))
   // tray-independent avatar switch (tray icon can be hidden in the Windows overflow)
   globalShortcut.register('Ctrl+Alt+A', () => cycleAvatar(win))
+  // M5: trigger a (mock) thinking bubble stream — also the probe's hook to test the bubble UI
+  globalShortcut.register('Ctrl+Alt+B', () => streamMockThinking(win))
   app.on('will-quit', () => globalShortcut.unregisterAll())
 }
 

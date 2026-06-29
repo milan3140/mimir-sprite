@@ -3,6 +3,15 @@
 export type TodoStatus = 'pending' | 'active' | 'paused' | 'done'
 export type Mode = 'idle' | 'working' | 'resting'
 
+// M5 thinking bubbles: Claude's pre-task prep plan, compressed to one tagged line per bubble.
+export type BubbleTag = '目標' | '準備' | '時程' | '資源' | '能力' | '時間' | '風險' | '第一步'
+export interface Bubble {
+  idx: number
+  tag: BubbleTag
+  text: string
+  sessionId?: string
+}
+
 // Binary does NOT go in db.json — files live on disk under
 // userData/mimir-sprite/attachments/<owner>/<ownerId>/<id>.<ext>; db holds only metadata + rel path.
 export interface Attachment {

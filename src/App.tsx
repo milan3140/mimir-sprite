@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { SpriteAvatar } from './components/SpriteAvatar'
 import { TodoPanel, ResizeGrip } from './components/TodoPanel'
+import { SpeechBubbleStack } from './components/SpeechBubbles'
 import { useAppStore } from './store/useAppStore'
 // Shared geometry — ONE source of truth with the main process (windowManager). Never redeclare here.
 import { CELL, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D } from './shared/geometry'
@@ -51,6 +52,8 @@ export default function App() {
   const livePanel = useAppStore(s => s.livePanel)  // transient size while dragging the resize handle
   const PANEL_W = livePanel?.w ?? storeW
   const PANEL_H = livePanel?.h ?? storeH
+  const pushBubble = useAppStore(s => s.pushBubble)
+  const clearBubbles = useAppStore(s => s.clearBubbles)
   const applySnapshot = useAppStore(s => s.applySnapshot)
 
   useEffect(() => {
@@ -62,6 +65,8 @@ export default function App() {
   useEffect(() => { window.api.storeGet().then(applySnapshot) }, [applySnapshot])
   useEffect(() => window.api.onExpandedChanged(setExpandedState), [setExpandedState])
   useEffect(() => window.api.onHiddenChanged(setHiddenState), [setHiddenState])
+  useEffect(() => window.api.onThinkBubble(pushBubble), [pushBubble])
+  useEffect(() => window.api.onThinkClear(clearBubbles), [clearBubbles])
 
   // ponytail: nub mode — tiny tab, nothing else
   if (hidden) return (
@@ -102,6 +107,7 @@ export default function App() {
       <div style={catBoxStyle}>
         <SpriteAvatar />
       </div>
+      <SpeechBubbleStack edge={anchorEdge} />
     </div>
   )
 }
