@@ -292,6 +292,8 @@ function usePanelRects(panelRef: React.RefObject<HTMLDivElement | null>, expande
         }
         // attachments (M3b probe signals): 📎 indicator + thumbnails actually loaded from disk
         entry.hasAttach = !!el.querySelector('[data-has-attach]')
+        const notesEl = el.querySelector('[data-detail-notes]') as HTMLElement | null
+        if (notesEl) entry.notesH = Math.round(notesEl.getBoundingClientRect().height) // probe: notes auto-grow
         const thumbs = Array.from(el.querySelectorAll('[data-detail-thumbs] img')) as HTMLImageElement[]
         entry.thumbs = thumbs.length
         entry.thumbLoaded = thumbs.some(im => im.naturalWidth > 0)

@@ -142,9 +142,14 @@ input:focus { box-shadow: 0 0 0 1px var(--ring) !important; }
   outline: none;
   resize: none;
   font-size: 12px;
-  line-height: 1.45;
-  min-height: 2.2rem;
+  line-height: 1.5;
   padding: 0;
+  /* auto-grow with content (Chromium 123+ / Electron 33) up to ~20 lines, then scroll — so a long
+     note isn't crammed into 2 lines. min-height keeps a comfortable starting size. */
+  field-sizing: content;
+  min-height: 3rem;
+  max-height: 20lh;
+  overflow-y: auto;
 }
 .detail-notes::placeholder { color: var(--fg-faint); }
 .detail-thumbs { display: flex; flex-wrap: wrap; gap: 6px; }

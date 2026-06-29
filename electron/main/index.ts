@@ -9,6 +9,13 @@ import { initStore, getTodos, getAppState } from './store'
 // ponytail: disable-gpu-compositing prevents the Win11 transparent-window-renders-black bug
 app.commandLine.appendSwitch('disable-gpu-compositing')
 
+// TEST ISOLATION: probes set MIMIR_TEST_USERDATA so their runs use a throwaway store and never
+// pollute the user's real todos (db.json + attachments live under userData). The user's own
+// `npm run dev` doesn't set it, so it's unaffected. Must run before any getPath('userData').
+if (process.env.MIMIR_TEST_USERDATA) {
+  app.setPath('userData', process.env.MIMIR_TEST_USERDATA)
+}
+
 let win: BrowserWindow | null = null
 
 app.whenReady().then(async () => {
