@@ -133,6 +133,7 @@ function TodoRow({ todo }: { todo: Todo }) {
           <EditableTitle todo={todo} onDone={() => setEditing(false)} />
         ) : (
           <span
+            data-row-title
             className="flex-1 text-xs text-[var(--fg)] truncate select-none"
             onDoubleClick={(e) => { e.stopPropagation(); setEditing(true) }}
             title="Double-click to rename"
@@ -197,12 +198,18 @@ function usePanelRects(panelRef: React.RefObject<HTMLDivElement | null>, expande
       const addInput = panel.querySelector('textarea[data-add-input]') as HTMLElement | null
       const rects: Record<string, unknown> = {}
       rects.panel = toScreen(panel.getBoundingClientRect()) // panel card outer rect (for gap checks)
-      if (addInput) rects.addInput = toScreen(addInput.getBoundingClientRect())
+      if (addInput) {
+        rects.addInput = toScreen(addInput.getBoundingClientRect())
+        rects.addInputValue = (addInput as HTMLTextAreaElement).value // probe: did the click focus + paste land?
+        rects.addInputFocused = document.activeElement === addInput
+      }
       // rows + their buttons
       const rows: Record<string, unknown>[] = []
       panel.querySelectorAll('[data-todo-id]').forEach(el => {
         const id = (el as HTMLElement).dataset.todoId!
         const entry: Record<string, unknown> = { id, rect: toScreen(el.getBoundingClientRect()) }
+        const titleEl = el.querySelector('[data-row-title]') as HTMLElement | null
+        if (titleEl) entry.title = titleEl.textContent ?? ''
         el.querySelectorAll('[data-btn]').forEach(btn => {
           const name = (btn as HTMLElement).dataset.btn!
           entry[name] = toScreen(btn.getBoundingClientRect())

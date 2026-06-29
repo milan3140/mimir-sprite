@@ -73,8 +73,11 @@ export default function App() {
 
   // CAT-GLUED: the cat cell is at the SAME window position on every edge. It NEVER moves on dock/drag/
   // hover — the window moves under it (main owns bounds), so main↔renderer never desync → no teleport.
+  // pointerEvents:'none' — the 190×190 cell is rendered ON TOP of the panel and overlaps it (e.g. the
+  // bottom-edge panel sits right under the cat), so a default 'auto' box would EAT clicks meant for the
+  // panel's add-todo input. The sprite re-enables pointer-events on itself, so it stays grabbable.
   const catBoxStyle: React.CSSProperties = {
-    position: 'absolute', left: CAT_X, top: CAT_Y, width: CELL, height: CELL,
+    position: 'absolute', left: CAT_X, top: CAT_Y, width: CELL, height: CELL, pointerEvents: 'none',
   }
 
   // panel (absolute, fixed size on every edge) positioned next to the constant cat cell, hugged, on the
