@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import {
-  Coffee, EyeOff, ChevronRight, ChevronDown, Play, Pause, Check, Brain, Trash2, Plus
+  Coffee, EyeOff, ChevronRight, ChevronDown, Play, Pause, Check, Brain, Trash2, Plus, Paperclip, X
 } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -11,7 +11,64 @@ import {
   SortableContext, verticalListSortingStrategy, useSortable, arrayMove
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { Todo } from '../shared/types'
+import type { Todo, Attachment } from '../shared/types'
+
+// --- Paste-image helpers (M3b) ---
+
+type PastedImage = { dataUrl: string; width: number; height: number; name: string }
+
+/** Extract the first image off a paste event as a data URL + natural size. */
+function readPasteImage(e: React.ClipboardEvent): Promise<PastedImage | null> {
+  const items = e.clipboardData?.items
+  if (!items) return Promise.resolve(null)
+  for (const it of Array.from(items)) {
+    if (it.type.startsWith('image/')) {
+      const file = it.getAsFile()
+      if (!file) continue
+      return new Promise(res => {
+        const fr = new FileReader()
+        fr.onload = () => {
+          const dataUrl = fr.result as string
+          const img = new Image()
+          img.onload = () => res({ dataUrl, width: img.naturalWidth, height: img.naturalHeight, name: file.name || 'pasted.png' })
+          img.onerror = () => res({ dataUrl, width: 0, height: 0, name: file.name || 'pasted.png' })
+          img.src = dataUrl
+        }
+        fr.readAsDataURL(file)
+      })
+    }
+  }
+  return Promise.resolve(null)
+}
+
+/** A saved attachment thumbnail — loads its bytes back from disk as a data URL. */
+function AttachmentThumb({ att }: { att: Attachment }) {
+  const [src, setSrc] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    window.api.attachmentRead(att.path).then(d => { if (alive) setSrc(d) })
+    return () => { alive = false }
+  }, [att.path])
+  return (
+    <div className="detail-thumb" title={att.name}>
+      {src ? <img src={src} alt={att.name} /> : null}
+    </div>
+  )
+}
+
+function fmtDuration(ms: number): string {
+  const m = Math.round(ms / 60000)
+  if (m < 60) return `${m}m`
+  return `${Math.floor(m / 60)}h ${m % 60}m`
+}
+
+/** Muted metadata line — adds info the row doesn't already show (created date, time spent, status). */
+function metaLine(todo: Todo): string {
+  const parts = [new Date(todo.createdAt).toLocaleDateString()]
+  if (todo.totalActiveMs > 0) parts.push(fmtDuration(todo.totalActiveMs))
+  parts.push(todo.status)
+  return parts.join('  ·  ')
+}
 
 // --- Inline title editor ---
 
@@ -44,10 +101,12 @@ function EditableTitle({ todo, onDone }: { todo: Todo; onDone: () => void }) {
   )
 }
 
-// --- Inline detail (animated accordion; in-flow, pushes rows down, full panel width) ---
-// No modal, no "Detail" header, no × — the row's left chevron is the only toggle. The open/close
-// height animation is pure CSS (grid-template-rows 0fr↔1fr) on the .detail-accordion wrapper, so the
-// rows below slide down/up smoothly with no measured JS height.
+// --- Inline detail (animated accordion) ---
+// Design (researched best practice — progressive disclosure): NOT a modal, NOT a card/box, and it does
+// NOT repeat the title (the row already shows it — repeating is redundant). The detail only ADDS what
+// the row can't show: editable notes, pasted screenshots, and a muted metadata line. It reads as an
+// indented extension of the row (aligned under the title), animating open via the CSS grid-rows trick.
+// The row's chevron is the only toggle (no header, no ×).
 
 function InlineDetail({ todo }: { todo: Todo }) {
   const [notes, setNotes] = useState(todo.notes ?? '')
@@ -60,31 +119,33 @@ function InlineDetail({ todo }: { todo: Todo }) {
     }
   }
 
+  const onPaste = async (e: React.ClipboardEvent) => {
+    const img = await readPasteImage(e)
+    if (img) {
+      e.preventDefault()
+      window.api.attachmentSave({ todoId: todo.id, dataUrl: img.dataUrl, name: img.name, width: img.width, height: img.height })
+    }
+  }
+
+  const atts = todo.attachments ?? []
+
   return (
-    <div
-      className="w-full overflow-hidden box-border"
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-sm)',
-        marginTop: 2, marginBottom: 2
-      }}
-      onClick={e => e.stopPropagation()}
-      onPointerDown={e => e.stopPropagation()}
-    >
-      {/* Full title (multiline) — replaces the old header; chevron up in the row collapses this */}
-      <div className="px-2 pt-1.5 pb-1 text-xs break-words whitespace-pre-wrap" style={{ color: 'var(--fg)' }}>{todo.title}</div>
-      {/* Editable notes */}
+    <div className="detail-body" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
       <textarea
         value={notes}
         onChange={e => { setNotes(e.target.value); dirty.current = true }}
         onBlur={save}
-        placeholder="Notes…"
-        className="w-full text-xs outline-none px-2 py-1 resize-none min-h-[3rem] box-border"
-        style={{ background: 'var(--bg-solid)', color: 'var(--fg)', border: 'none' }}
-        onPointerDown={e => e.stopPropagation()}
+        onPaste={onPaste}
+        placeholder="Notes…  (paste a screenshot to attach)"
+        className="detail-notes"
+        data-detail-notes
       />
-      {/* ponytail: seam for attachments — later slice adds an attachment list here */}
+      {atts.length > 0 && (
+        <div className="detail-thumbs" data-detail-thumbs>
+          {atts.map(a => <AttachmentThumb key={a.id} att={a} />)}
+        </div>
+      )}
+      <div className="detail-meta">{metaLine(todo)}</div>
     </div>
   )
 }
@@ -139,6 +200,14 @@ function TodoRow({ todo }: { todo: Todo }) {
             title="Double-click to rename"
           >
             {todo.title.split('\n')[0]}
+          </span>
+        )}
+
+        {/* 📎 — this item has attachments (lets you spot it without expanding) */}
+        {(todo.attachments?.length ?? 0) > 0 && (
+          <span className="shrink-0 flex items-center gap-px text-[var(--fg-faint)]" data-has-attach title={`${todo.attachments!.length} attachment(s)`}>
+            <Paperclip size={11} />
+            {todo.attachments!.length > 1 && <span className="text-[10px]">{todo.attachments!.length}</span>}
           </span>
         )}
 
@@ -203,6 +272,7 @@ function usePanelRects(panelRef: React.RefObject<HTMLDivElement | null>, expande
         rects.addInputValue = (addInput as HTMLTextAreaElement).value // probe: did the click focus + paste land?
         rects.addInputFocused = document.activeElement === addInput
       }
+      rects.pendingThumbs = panel.querySelectorAll('[data-pending-thumbs] img').length // queued pasted screenshots
       // rows + their buttons
       const rows: Record<string, unknown>[] = []
       panel.querySelectorAll('[data-todo-id]').forEach(el => {
@@ -220,6 +290,11 @@ function usePanelRects(panelRef: React.RefObject<HTMLDivElement | null>, expande
           entry.detail = toScreen(det.getBoundingClientRect())
           entry.detailOpen = det.getAttribute('data-open')
         }
+        // attachments (M3b probe signals): 📎 indicator + thumbnails actually loaded from disk
+        entry.hasAttach = !!el.querySelector('[data-has-attach]')
+        const thumbs = Array.from(el.querySelectorAll('[data-detail-thumbs] img')) as HTMLImageElement[]
+        entry.thumbs = thumbs.length
+        entry.thumbLoaded = thumbs.some(im => im.naturalWidth > 0)
         rows.push(entry)
       })
       rects.rows = rows
@@ -236,6 +311,7 @@ export function TodoPanel({ edge }: { edge: string }) {
   const appMode = useAppStore((s) => s.appMode)
   const expanded = useAppStore((s) => s.expanded)
   const [newTitle, setNewTitle] = useState('')
+  const [pending, setPending] = useState<PastedImage[]>([]) // screenshots pasted into the add box, attached on submit
   const panelRef = useRef<HTMLDivElement>(null)
 
   usePanelRects(panelRef, expanded)
@@ -259,11 +335,19 @@ export function TodoPanel({ edge }: { edge: string }) {
     window.api.todoReorder(reordered.map(t => t.id))
   }
 
-  const addTodo = () => {
+  const addTodo = async () => {
     const title = newTitle.trim()
-    if (!title) return
-    window.api.todoAdd(title)
-    setNewTitle('')
+    if (!title && pending.length === 0) return
+    const todo = await window.api.todoAdd(title || '📷 screenshot')
+    for (const img of pending) {
+      await window.api.attachmentSave({ todoId: todo.id, dataUrl: img.dataUrl, name: img.name, width: img.width, height: img.height })
+    }
+    setNewTitle(''); setPending([])
+  }
+
+  const onAddPaste = async (e: React.ClipboardEvent) => {
+    const img = await readPasteImage(e)
+    if (img) { e.preventDefault(); setPending(p => [...p, img]) }
   }
 
   const isResting = appMode.mode === 'resting'
@@ -315,26 +399,42 @@ export function TodoPanel({ edge }: { edge: string }) {
       </div>
 
       {/* Add input */}
-      <div className="flex items-center gap-1 px-2 py-1.5"
-           style={{ borderTop: '1px solid var(--border)' }}>
-        <textarea
-          data-add-input
-          value={newTitle}
-          onChange={e => setNewTitle(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addTodo() } }}
-          placeholder="Add todo…  (Shift+Enter = newline)"
-          rows={1}
-          className="flex-1 text-xs outline-none px-2 py-1 resize-none max-h-24"
-          style={{
-            background: 'var(--bg-solid)',
-            color: 'var(--fg)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)'
-          }}
-        />
-        <button onClick={addTodo} style={{ color: 'var(--fg-muted)' }} className="hover:opacity-80" aria-label="Add todo">
-          <Plus size={14} />
-        </button>
+      <div className="px-2 py-1.5" style={{ borderTop: '1px solid var(--border)' }}>
+        {/* pasted screenshots, queued — attach to the new todo on submit */}
+        {pending.length > 0 && (
+          <div className="detail-thumbs" style={{ marginBottom: 6 }} data-pending-thumbs>
+            {pending.map((img, i) => (
+              <div key={i} className="detail-thumb detail-thumb-pending" title={img.name}>
+                <img src={img.dataUrl} alt={img.name} />
+                <button className="detail-thumb-x" aria-label="Remove"
+                        onClick={() => setPending(p => p.filter((_, j) => j !== i))}>
+                  <X size={10} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center gap-1">
+          <textarea
+            data-add-input
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            onPaste={onAddPaste}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addTodo() } }}
+            placeholder="Add todo…  (paste a screenshot · Shift+Enter = newline)"
+            rows={1}
+            className="flex-1 text-xs outline-none px-2 py-1 resize-none max-h-24"
+            style={{
+              background: 'var(--bg-solid)',
+              color: 'var(--fg)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius-sm)'
+            }}
+          />
+          <button onClick={addTodo} style={{ color: 'var(--fg-muted)' }} className="hover:opacity-80" aria-label="Add todo">
+            <Plus size={14} />
+          </button>
+        </div>
       </div>
     </div>
   )

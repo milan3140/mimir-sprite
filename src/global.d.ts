@@ -1,4 +1,4 @@
-import type { Todo, StoreSnapshot } from './shared/types'
+import type { Todo, StoreSnapshot, Attachment } from './shared/types'
 
 declare global {
   interface Window {
@@ -34,6 +34,9 @@ declare global {
       appSetMode: (mode: string) => Promise<void>
       storeGet: () => Promise<StoreSnapshot>
       sendPanelRects: (rects: unknown) => void
+      // Attachments (M3b)
+      attachmentSave: (p: { todoId: string; dataUrl: string; name?: string; width?: number; height?: number }) => Promise<Attachment>
+      attachmentRead: (relPath: string) => Promise<string | null>
     }
   }
 }

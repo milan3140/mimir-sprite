@@ -59,4 +59,9 @@ contextBridge.exposeInMainWorld('api', {
   },
   storeGet: () => ipcRenderer.invoke('store:get'),
   sendPanelRects: (rects: unknown) => ipcRenderer.send('panel:rects', rects),
+
+  // M3b attachments
+  attachmentSave: (p: { todoId: string; dataUrl: string; name?: string; width?: number; height?: number }) =>
+    ipcRenderer.invoke('attachment:save', p),
+  attachmentRead: (relPath: string): Promise<string | null> => ipcRenderer.invoke('attachment:read', relPath),
 })
