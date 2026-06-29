@@ -6,6 +6,7 @@ import {
   reorderTodos, startTodo, pauseTodo, completeTodo, setMode, addAttachmentToTodo, setPanelSize
 } from './store'
 import { saveImageAttachment, readAttachmentDataUrl } from './attachments'
+import { streamRealThinking } from './thinking'
 import type { StoreSnapshot } from '../../src/shared/types'
 
 export function setupIpc(win: BrowserWindow): void {
@@ -32,6 +33,13 @@ export function setupIpc(win: BrowserWindow): void {
 
   // user dragged the panel resize handle (clamped to geometry MIN/MAX, persisted)
   ipcMain.handle('panel:resize', (_e, w: number, h: number) => setPanelSize(w, h))
+
+  // M5: manual 🧠 — run the two-stage ClaudeRunner for one todo, stream the bubbles. Spends a Claude call.
+  ipcMain.handle('think:now', async (_e, id: string) => {
+    const todo = getTodos().find((t) => t.id === id)
+    if (!todo) { dlog('think:now-missing', { id }); return }
+    await streamRealThinking(win, todo.title, todo.notes ?? '')
+  })
 
   ipcMain.on('window:hide', () => hideToNub(win))
   ipcMain.on('window:restore', () => restoreFromNub(win))

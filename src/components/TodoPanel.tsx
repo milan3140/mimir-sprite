@@ -211,6 +211,7 @@ function TodoRow({ todo }: { todo: Todo }) {
   const [hovered, setHovered] = useState(false)
   const [editing, setEditing] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [thinkBusy, setThinkBusy] = useState(false)  // M5: guards against double-trigger (= double spend)
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -282,7 +283,15 @@ function TodoRow({ todo }: { todo: Todo }) {
               <Check size={14} />
             </button>
           )}
-          <button className="text-[var(--fg-muted)] opacity-40 cursor-default" aria-label="Think (coming soon)">
+          <button
+            onClick={async () => {
+              if (thinkBusy) return
+              setThinkBusy(true)
+              try { await window.api.thinkNow(todo.id) } finally { setThinkBusy(false) }
+            }}
+            disabled={thinkBusy}
+            className={`text-[var(--fg)] hover:text-[var(--brand)] ${thinkBusy ? 'opacity-50 animate-pulse cursor-wait' : ''}`}
+            aria-label="Think — plan the prep with Claude" data-btn="think">
             <Brain size={14} />
           </button>
           {hovered && (

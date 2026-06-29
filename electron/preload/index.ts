@@ -70,6 +70,7 @@ contextBridge.exposeInMainWorld('api', {
   setResizing: (v: boolean) => ipcRenderer.send('panel:resizing', v),
 
   // M5 thinking bubbles (streamed from main)
+  thinkNow: (todoId: string) => ipcRenderer.invoke('think:now', todoId),
   onThinkBubble: (cb: (b: unknown) => void) => {
     const h = (_e: Electron.IpcRendererEvent, b: unknown): void => { cb(b) }
     ipcRenderer.on('think:bubble', h)

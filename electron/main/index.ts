@@ -6,6 +6,7 @@ import { setupIpc, broadcastStore } from './ipc'
 import { initDebugLog } from './debugLog'
 import { initStore, getTodos, getAppState, getPanelSize } from './store'
 import { setupTestControl } from './testControl'
+import { startThinkScheduler } from './thinkScheduler'
 
 // ponytail: disable-gpu-compositing prevents the Win11 transparent-window-renders-black bug
 app.commandLine.appendSwitch('disable-gpu-compositing')
@@ -37,6 +38,9 @@ app.whenReady().then(async () => {
   w.webContents.on('did-finish-load', () =>
     broadcastStore(w, { todos: getTodos(), appState: getAppState(), panel: getPanelSize() })
   )
+
+  // M5 auto-think — gated OFF by default (see getThinkSettings); never auto-spends unless the user opts in.
+  startThinkScheduler(w)
 })
 
 app.on('window-all-closed', () => app.quit())

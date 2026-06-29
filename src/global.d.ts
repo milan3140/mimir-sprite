@@ -40,6 +40,7 @@ declare global {
       panelResize: (w: number, h: number) => Promise<void>
       setResizing: (v: boolean) => void
       // M5 thinking bubbles
+      thinkNow: (todoId: string) => Promise<void>
       onThinkBubble: (cb: (b: Bubble) => void) => () => void
       onThinkClear: (cb: () => void) => () => void
     }

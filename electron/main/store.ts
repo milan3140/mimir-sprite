@@ -77,6 +77,18 @@ export async function setPanelSize(w: number, h: number): Promise<void> {
   dlog('panel:resize', c)
 }
 
+// M5 auto-think config — DEFAULT OFF (the cat never auto-spends a Claude call unless the user opts in).
+// env MIMIR_THINK_AUTO=1 forces it on with a fast cadence, for testing the scheduler without a UI toggle.
+export function getThinkSettings(): { autoEnabled: boolean; minMinutes: number; maxMinutes: number; candidateTopN: number } {
+  const s = db?.data.settings as Record<string, unknown> | undefined
+  return {
+    autoEnabled: process.env.MIMIR_THINK_AUTO === '1' || s?.thinkAutoEnabled === true,
+    minMinutes: (s?.thinkMinMinutes as number) ?? 30,
+    maxMinutes: (s?.thinkMaxMinutes as number) ?? 60,
+    candidateTopN: (s?.thinkCandidateTopN as number) ?? 3,
+  }
+}
+
 // --- Todo CRUD ---
 
 export function getTodos(): Todo[] {
