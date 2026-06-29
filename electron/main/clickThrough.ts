@@ -22,11 +22,17 @@ import { isExpanded, isHidden, isSnapping, isDragging, expandWindow, collapseWin
 export function setupClickThrough(win: BrowserWindow): void {
   win.setIgnoreMouseEvents(true, { forward: true })
 
+  // Z-ORDER: a transparent always-on-top window can be demoted below other windows (Windows lets
+  // another app steal the top), so the cat "flashes to a lower layer and can't be clicked". The moment
+  // it gets demoted is when it loses focus, so re-assert topmost on 'blur' — event-driven, not a blind
+  // periodic heartbeat (which would itself cause a visible re-raise flicker). Plus moveTop the instant
+  // the cursor reaches the cat/panel (below), so it's on top right when you reach for it.
+  win.on('blur', () => { if (!win.isDestroyed()) win.setAlwaysOnTop(true, 'screen-saver') })
+
   let catRect = { x: 0, y: 0, w: 0, h: 0 } // sprite box within the window (DIP), from the renderer
   let lastOver: boolean | null = null      // last applied interactive state; null = must re-assert
   let skippedLast = true                    // last tick was skipped (a transition may have changed state)
   let outsideSince = 0
-  let topTick = 0                           // throttle the always-on-top re-assert
 
   ipcMain.on('cat:rect', (_e, r: { x: number; y: number; w: number; h: number }) => {
     if (r) catRect = r
@@ -63,12 +69,7 @@ export function setupClickThrough(win: BrowserWindow): void {
     }
 
     const over = onCat || onPanel
-    // Z-ORDER: a transparent always-on-top window can be demoted below other windows (Windows lets
-    // another app's SetForegroundWindow / a newly-shown topmost steal the top), so the cat "flashes to
-    // a lower layer and can't be clicked". Re-raise it: the instant the cursor reaches the cat/panel
-    // (so it's on top right when you reach for it), plus a slow heartbeat re-assert while idle.
-    if (over && lastOver !== true) win.moveTop()
-    if (++topTick % 20 === 0) win.setAlwaysOnTop(true, 'screen-saver')
+    if (over && lastOver !== true) win.moveTop() // raise to top the instant the cursor reaches it
     applyInteractive(over) // click-through unless over the cat or the open panel
     skippedLast = false
 
