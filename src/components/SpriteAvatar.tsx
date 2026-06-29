@@ -13,7 +13,9 @@ export function SpriteAvatar() {
   const setAnchorEdge = useAppStore((s) => s.setAnchorEdge)
   const avatarId = useAppStore((s) => s.avatarId)
   const setAvatarId = useAppStore((s) => s.setAvatarId)
-  const [animState] = useState<AvatarState>('idle')
+  // M5: the cat "talks" (alert/meow pose) while it's speaking thinking bubbles, idle otherwise.
+  const thinking = useAppStore((s) => s.thinking)
+  const animState: AvatarState = thinking ? 'alert' : 'idle'
 
   const avatar = avatarSets[avatarId] ?? avatarSets.luizmelo
   const state = avatar.states[animState]
@@ -24,13 +26,16 @@ export function SpriteAvatar() {
   // edge. Use the RESTING frame (frames[0]) only — a union over all idle frames is wider than the
   // resting pose, which left the docked cat inset by up to ~19px (the animation's reach). Flushing
   // the resting silhouette plants the cat on the edge; the occasional wider idle frame just brushes it.
+  // ALWAYS derive from the IDLE pose (not the current animState) so the cat "talking" never shifts the
+  // docked flush geometry — talking swaps only the visible animation, not the content box.
+  const idleState = avatar.states.idle
   const [cellBox, setCellBox] = useState<CellBox | null>(null)
   useEffect(() => {
     let alive = true
-    const restFrame = state.frames.length ? [state.frames[0]] : state.frames
-    getContentCellBox(state.image, restFrame, tileW, tileH).then((b) => { if (alive) setCellBox(b) })
+    const restFrame = idleState.frames.length ? [idleState.frames[0]] : idleState.frames
+    getContentCellBox(idleState.image, restFrame, tileW, tileH).then((b) => { if (alive) setCellBox(b) })
     return () => { alive = false }
-  }, [state.image, state.frames, tileW, tileH])
+  }, [idleState.image, idleState.frames, tileW, tileH])
 
   // Report (a) the generous sprite box for click/drag hit-testing, and
   //        (b) the tight visible-content rect for edge snapping.
