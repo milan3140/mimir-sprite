@@ -3,6 +3,20 @@
 export type TodoStatus = 'pending' | 'active' | 'paused' | 'done'
 export type Mode = 'idle' | 'working' | 'resting'
 
+// Binary does NOT go in db.json — files live on disk under
+// userData/mimir-sprite/attachments/<owner>/<ownerId>/<id>.<ext>; db holds only metadata + rel path.
+export interface Attachment {
+  id: string
+  kind: 'image' | 'file'
+  path: string                   // relative to userData/mimir-sprite (e.g. attachments/todo/<id>/<aid>.png)
+  name: string
+  mime?: string
+  bytes?: number
+  width?: number
+  height?: number
+  createdAt: number
+}
+
 export interface Todo {
   id: string
   title: string
@@ -17,6 +31,7 @@ export interface Todo {
   thinkingSessionIds: string[]
   notebookIds: string[]
   completionLogPath?: string
+  attachments?: Attachment[]     // pasted screenshots / files (M3b: paste-image priority)
 }
 
 export interface AppMode {

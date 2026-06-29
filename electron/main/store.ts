@@ -2,7 +2,8 @@ import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync, existsSync, appendFileSync } from 'fs'
 import { dlog } from './debugLog'
-import type { DB, Todo, AppMode, StoreSnapshot } from '../../src/shared/types'
+import { deleteAttachmentsForOwner } from './attachments'
+import type { DB, Todo, AppMode, StoreSnapshot, Attachment } from '../../src/shared/types'
 
 // ponytail: lowdb v7 is ESM-only. We dynamic-import it at init time.
 let db: { data: DB; write: () => Promise<void> } | null = null
@@ -95,8 +96,18 @@ export async function updateTodo(id: string, patch: Partial<Pick<Todo, 'title' |
   await save(); broadcast()
 }
 
+export async function addAttachmentToTodo(todoId: string, att: Attachment): Promise<void> {
+  if (!db) return
+  const t = db.data.todos.find(x => x.id === todoId)
+  if (!t) return
+  ;(t.attachments ??= []).push(att)
+  await save(); broadcast()
+  dlog('todo:attach', { todoId, attId: att.id, n: t.attachments.length })
+}
+
 export async function removeTodo(id: string): Promise<void> {
   if (!db) return
+  deleteAttachmentsForOwner('todo', id) // cascade: no orphan attachment files
   db.data.todos = db.data.todos.filter(t => t.id !== id)
   if (db.data.appState.activeTodoId === id) {
     db.data.appState.activeTodoId = undefined
