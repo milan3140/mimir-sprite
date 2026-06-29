@@ -1,8 +1,10 @@
 import { BrowserWindow, screen, ipcMain, Rectangle } from 'electron'
 import { join } from 'path'
 import { dlog } from './debugLog'
+import { CELL, PANEL_W, PANEL_H, WIN_W, WIN_H, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D } from '../../src/shared/geometry'
 
 export type AnchorEdge = 'left' | 'right' | 'top' | 'bottom'
+export { WIN_W, WIN_H }
 
 // ===========================================================================================
 // UNIFIED FIXED-WINDOW, CAT-GLUED MODEL (see TEST_DESIGN.md §6 contract)
@@ -17,24 +19,8 @@ export type AnchorEdge = 'left' | 'right' | 'top' | 'bottom'
 // visible main↔renderer desync to flash. This kills the whole flicker/teleport class structurally.
 // ===========================================================================================
 
-const CELL = 190                 // the cat cell (sprite lives in a 190×190 box)
-const PANEL_W = 267
-const PANEL_H = 360
-// the window reserves panel room on BOTH sides of the cat (so the cat's window position is the same
-// for every docked edge); panel only ever shows on the screen-centre side.
-export const WIN_W = CELL + 2 * PANEL_W   // 724
-export const WIN_H = CELL + 2 * PANEL_H   // 910
-const CAT_X = PANEL_W                      // cat cell's constant x inside the window (267)
-const CAT_Y = PANEL_H                      // cat cell's constant y inside the window (360)
-
-// HUG: pull the panel toward the visible cat (must match App.tsx)
-const HUG_X = 32
-const HUG_Y = 37
-
-// ear nub dims (must match CatPeek in App.tsx)
-const EAR_W = 70
-const EAR_D = 30
-
+// Geometry constants (CELL, PANEL_W/H, WIN_W/H, CAT_X/Y, HUG_X/Y, EAR_W/D) now come from the shared
+// module ../../src/shared/geometry — the ONE source of truth shared with the renderer (App.tsx).
 let currentlyExpanded = false
 let currentEdge: AnchorEdge = 'right'
 let snapping = false

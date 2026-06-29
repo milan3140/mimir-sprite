@@ -2,18 +2,11 @@ import { useEffect } from 'react'
 import { SpriteAvatar } from './components/SpriteAvatar'
 import { TodoPanel } from './components/TodoPanel'
 import { useAppStore } from './store/useAppStore'
+// Shared geometry — ONE source of truth with the main process (windowManager). Never redeclare here.
+import { CELL, PANEL_W, PANEL_H, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D } from './shared/geometry'
 
-// UNIFIED FIXED-WINDOW, CAT-GLUED MODEL (see TEST_DESIGN.md §6). The window is ONE fixed size and the
-// cat cell sits at a CONSTANT position (CAT_X, CAT_Y) on every edge — only the panel moves per edge.
-// These MUST match windowManager.ts.
-const CELL = 190           // cat cell
-const PANEL_W = 267
-const PANEL_H = 360
-const CAT_X = PANEL_W      // cat cell x inside the window (267)
-const CAT_Y = PANEL_H      // cat cell y inside the window (360)
-// ear-strip dims — must match EAR_W/EAR_D in windowManager (aspect ≈ Cat-1-Peek 30:13 to avoid stretch)
-const EAR_W = 70
-const EAR_D = 30
+// UNIFIED FIXED-WINDOW, CAT-GLUED MODEL (see TEST_DESIGN.md §6): ONE fixed window size; the cat cell
+// sits at a CONSTANT position (CAT_X, CAT_Y) on every edge — only the panel moves per edge.
 const peekImg = new URL('../assets/sprites/luizmelo/siamese/Cat-1-Peek.png', import.meta.url).href
 
 // When hidden, the window is a small strip at the docked screen edge showing just two cat ears,
@@ -66,10 +59,6 @@ export default function App() {
       <CatPeek edge={hiddenEdge} />
     </div>
   )
-
-  // HUG: pull the panel toward the visible cat (must match windowManager HUG_X/HUG_Y).
-  const HUG_X = 32
-  const HUG_Y = 37
 
   // CAT-GLUED: the cat cell is at the SAME window position on every edge. It NEVER moves on dock/drag/
   // hover — the window moves under it (main owns bounds), so main↔renderer never desync → no teleport.
