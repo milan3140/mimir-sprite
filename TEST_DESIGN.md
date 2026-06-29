@@ -43,9 +43,11 @@ cell must map to an automated probe assertion or be explicitly marked UNCOVERED.
 | F3 expand × hidden | hover must NOT expand while showing ears | probe_overlap (hover-while-hidden) | ✅ |
 | F11 hide × expanded | must collapse first, then ears (not ears over panel) | probe_overlap (hide-from-expanded) | ✅ |
 | F12 restore → F3 | after restore, hover-expand must work again | probe_overlap (restore→hover) | ✅ |
-| **F5/F6/F8/F9/F10 CRUD × Edge×4** | panel buttons/rows reachable+working each edge | (planned panel-CRUD probe) | ❌ UNCOVERED |
-| F7 detail × long-content × Edge | inline accordion pushes rows; stays in panel | probe_detail (right edge; opens 0→86, pushes 86px, within panel, closes) | ✅ right (×4 edges pending) |
+| F5/F6/F8/F9/F10 CRUD × Edge×4 | panel buttons/rows reachable+working each edge | probe_panel (add/rename/detail/start/pause/complete/remove, net-zero) | ✅ 37/37 ×4 edges |
+| F7 detail × Edge×4 | inline accordion pushes rows; stays in panel | probe_panel (detail opens 0→86 + pushes, closes) per edge + probe_detail visual | ✅ ×4 edges |
 | **F4 collapse × F7 detail-open** | collapse while a detail is open | — | ❌ UNCOVERED |
+| **DIRECT hover-grab × Edge×4** | hovering the cat (no move-away) must make it grabbable — the interactivity-desync bug | probe_grab (direct hover → drag:start) | ✅ 5/5 |
+| **add-box click × Edge×4** | the add-todo input is clickable even where the cat cell overlaps the panel (bottom edge) | probe_panel (focused+value land) | ✅ ×4 edges |
 | F13 initial-load × first-open | items only appeared after first add (fixed) | manual/screenshot | ✅ fixed |
 
 ## 4. Coverage summary & next probes
