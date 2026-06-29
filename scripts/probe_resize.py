@@ -93,6 +93,8 @@ def main():
     global SCALE
     if LOG.exists():
         LOG.unlink()
+    import shutil
+    shutil.rmtree(PROJECT / "_probe_userdata", ignore_errors=True)  # fresh store -> default panel size
     g.free_port(5173)
     SCALE = g.dpi_scale()
     proc = g.launch("npm run dev", cwd=PROJECT)
@@ -139,16 +141,37 @@ def main():
         pyautogui.mouseDown()
         g.move_ghosted(None, tp[0], tp[1], dur=0.6)
         pyautogui.mouseUp()
-        time.sleep(0.6)
-        p2 = rects().get("panel") or {}
-        check("drag grows the panel", p2.get("w", 0) > w0 + 40 and p2.get("h", 0) > h0 + 40,
-              f"{w0}x{h0} -> {p2.get('w')}x{p2.get('h')}")
+        time.sleep(0.5)
         check("resize persisted", count("panel:resize") > rp, f"events={count('panel:resize') - rp}")
-
-        # persistence across the snapshot: panel:resize logs the clamped size
         rsz = last_json("panel:resize")
-        check("persisted size is bigger", bool(rsz) and rsz.get("w", 0) > w0,
+        check("persisted size is bigger", bool(rsz) and rsz.get("w", 0) > w0 + 40,
               f"stored={rsz}")
+
+        # the cursor ended off-panel (it collapses) — re-hover the cat to re-expand, then measure the
+        # RENDERED panel so we confirm the store update actually grew the visible panel.
+        g.move_ghosted(None, *g.to_physical(wa["x"] + 80, wa["y"] + 80, SCALE), dur=0.3)
+        time.sleep(0.5)
+        cx, cy = cat_center()
+        g.move_ghosted(None, *g.to_physical(cx, cy, SCALE), dur=0.4)
+        wait_new("window:expand", count("window:expand"), 5)
+        time.sleep(0.7)
+        p2 = rects().get("panel") or {}
+        check("rendered panel grew", p2.get("w", 0) > w0 + 40 and p2.get("h", 0) > h0 + 40,
+              f"{w0}x{h0} -> {p2.get('w')}x{p2.get('h')}")
+        # screenshot the (bigger) panel to LOOK at
+        try:
+            import mss as _m, numpy as _np
+            from PIL import Image as _I
+            pan = p2 or rects().get("panel")
+            if pan:
+                with _m.mss() as s:
+                    x = int((pan["x"] - 12) * SCALE); y = int((pan["y"] - 12) * SCALE)
+                    w = int((pan["w"] + 24) * SCALE); h = int((pan["h"] + 24) * SCALE)
+                    im = _np.asarray(s.grab({"left": max(0, x), "top": max(0, y), "width": w, "height": h}))[:, :, :3]
+                    out = PROJECT / "_resize_shots"; out.mkdir(exist_ok=True)
+                    _I.fromarray(im[:, :, ::-1]).save(out / "panel_resized.png")
+        except Exception as _e:
+            print("shot err", _e)
 
         npass = sum(1 for _, ok, _ in results if ok)
         print(f"\n[RESIZE] {npass}/{len(results)} passed")

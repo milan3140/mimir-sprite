@@ -28,6 +28,7 @@ function ResizeGrip({ edge }: { edge: string }) {
   // were untestable and could miss drags.
   const onDown = (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation()
+    window.api.setResizing(true)   // keep the window interactive + un-collapsed while dragging outward
     const sx = e.screenX, sy = e.screenY
     let last = { w: w0, h: h0 }
     const onMove = (ev: MouseEvent) => {
@@ -44,6 +45,7 @@ function ResizeGrip({ edge }: { edge: string }) {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
       window.api.panelResize(last.w, last.h)
+      window.api.setResizing(false)
       setLive(null)
     }
     window.addEventListener('mousemove', onMove)

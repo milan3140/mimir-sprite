@@ -34,10 +34,14 @@ export function setupClickThrough(win: BrowserWindow): void {
   let lastOver: boolean | null = null      // last applied interactive state; null = must re-assert
   let skippedLast = true                    // last tick was skipped (a transition may have changed state)
   let outsideSince = 0
+  let resizing = false   // user is dragging the panel resize grip (cursor drags OUTWARD off the panel)
 
   ipcMain.on('cat:rect', (_e, r: { x: number; y: number; w: number; h: number }) => {
     if (r) catRect = r
   })
+  // while resizing, keep the window interactive (so the renderer keeps receiving mousemove) and DON'T
+  // collapse — the grip drags outside the panel hit-rect, which would otherwise kill the drag.
+  ipcMain.on('panel:resizing', (_e, v: boolean) => { resizing = !!v })
 
   const applyInteractive = (over: boolean): void => {
     // re-assert after a skipped tick (windowManager may have changed the real state during a
@@ -69,7 +73,7 @@ export function setupClickThrough(win: BrowserWindow): void {
       }
     }
 
-    const over = onCat || onPanel
+    const over = onCat || onPanel || resizing
     if (over && lastOver !== true) win.moveTop() // raise to top the instant the cursor reaches it
     applyInteractive(over) // click-through unless over the cat or the open panel
     skippedLast = false

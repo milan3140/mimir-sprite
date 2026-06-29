@@ -67,4 +67,5 @@ contextBridge.exposeInMainWorld('api', {
 
   // Panel resize (M: drag handle)
   panelResize: (w: number, h: number) => ipcRenderer.invoke('panel:resize', w, h),
+  setResizing: (v: boolean) => ipcRenderer.send('panel:resizing', v),
 })

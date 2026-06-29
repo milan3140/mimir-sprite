@@ -38,6 +38,7 @@ declare global {
       attachmentSave: (p: { todoId: string; dataUrl: string; name?: string; width?: number; height?: number }) => Promise<Attachment>
       attachmentRead: (relPath: string) => Promise<string | null>
       panelResize: (w: number, h: number) => Promise<void>
+      setResizing: (v: boolean) => void
     }
   }
 }
