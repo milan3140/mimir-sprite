@@ -1,7 +1,13 @@
 import { BrowserWindow, screen, ipcMain, Rectangle } from 'electron'
 import { join } from 'path'
 import { dlog } from './debugLog'
+import { getInjectedCursor } from './testControl'
 import { CELL, PANEL_W, PANEL_H, WIN_W, WIN_H, CAT_X, CAT_Y, HUG_X, HUG_Y, EAR_W, EAR_D } from '../../src/shared/geometry'
+
+// cursor source: injected (test-control, no OS mouse) when present, else the real OS cursor
+function cursorPoint(): { x: number; y: number } {
+  return getInjectedCursor() ?? screen.getCursorScreenPoint()
+}
 
 export type AnchorEdge = 'left' | 'right' | 'top' | 'bottom'
 export { WIN_W, WIN_H }
@@ -87,7 +93,7 @@ export function createWindow(): BrowserWindow {
   ipcMain.on('drag:start', (_e, catScreenRect?: { x: number; y: number; w: number; h: number }) => {
     if (win.isDestroyed() || hidden) return
     if (currentlyExpanded) collapseWindow(win)
-    const cursor = screen.getCursorScreenPoint()
+    const cursor = cursorPoint()
     const [wx, wy] = win.getPosition()
     dragOffset = { x: cursor.x - wx, y: cursor.y - wy }
     dragging = true
@@ -101,7 +107,7 @@ export function createWindow(): BrowserWindow {
         if (dragInterval) clearInterval(dragInterval)
         return
       }
-      const c = screen.getCursorScreenPoint()
+      const c = cursorPoint()
       const nx = Math.round(c.x - dragOffset.x)
       const ny = Math.round(c.y - dragOffset.y)
       if (!Number.isFinite(nx) || !Number.isFinite(ny)) return

@@ -5,6 +5,7 @@ import { setupTray } from './tray'
 import { setupIpc, broadcastStore } from './ipc'
 import { initDebugLog } from './debugLog'
 import { initStore, getTodos, getAppState } from './store'
+import { setupTestControl } from './testControl'
 
 // ponytail: disable-gpu-compositing prevents the Win11 transparent-window-renders-black bug
 app.commandLine.appendSwitch('disable-gpu-compositing')
@@ -24,6 +25,7 @@ app.whenReady().then(async () => {
   setupIpc(win)
   setupClickThrough(win)
   setupTray(win)
+  setupTestControl(win) // test-control channel (MIMIR_TEST_CONTROL=1) — inject input, no OS cursor
 
   // init store — broadcast changes to renderer
   const w = win

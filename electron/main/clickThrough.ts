@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain, screen } from 'electron'
 import { isExpanded, isHidden, isSnapping, isDragging, expandWindow, collapseWindow, getPanelHitRect } from './windowManager'
+import { getInjectedCursor } from './testControl'
 
 /**
  * Main-process cursor controller (single source of truth) for the FIXED-WINDOW model. The window is
@@ -51,7 +52,7 @@ export function setupClickThrough(win: BrowserWindow): void {
       skippedLast = true // next active tick must re-assert: the transition owns the mouse state now
       return
     }
-    const cursor = screen.getCursorScreenPoint()
+    const cursor = getInjectedCursor() ?? screen.getCursorScreenPoint()
     const b = win.getBounds()
     const relX = cursor.x - b.x
     const relY = cursor.y - b.y
