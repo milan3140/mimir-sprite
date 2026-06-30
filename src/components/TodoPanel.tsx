@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import {
-  Coffee, EyeOff, ChevronRight, ChevronDown, Play, Pause, Check, Brain, Trash2, Plus, Paperclip, X
+  Coffee, EyeOff, ChevronRight, ChevronDown, Play, Pause, Check, Brain, Trash2, Plus, Paperclip, X,
+  Notebook as NotebookIcon,
 } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -11,7 +12,7 @@ import {
   SortableContext, verticalListSortingStrategy, useSortable, arrayMove
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { Todo, Attachment, ThinkingSession } from '../shared/types'
+import type { Todo, Attachment, ThinkingSession, Notebook } from '../shared/types'
 import { clampPanel } from '../shared/geometry'
 
 // --- Resize grip: drag to change the panel size (persisted). The dimension that's centred on the cat
@@ -203,6 +204,184 @@ function ThinkingTranscript({ todo, openSignal }: { todo: Todo; openSignal?: num
   )
 }
 
+// --- Hover popovers (S4: Notebook icon + Brain chat) ---
+
+// ponytail: position:fixed so it escapes the panel's overflow:hidden; anchored to the button rect.
+// Smart flip: opens below by default; if that goes off-screen, opens above instead.
+const MAX_POP_H = 220
+
+function popPos(anchorRect: DOMRect, flip: boolean): React.CSSProperties {
+  const base = { right: window.innerWidth - anchorRect.right, zIndex: 9999 } as React.CSSProperties
+  return flip
+    ? { ...base, bottom: window.innerHeight - anchorRect.top + 4 }
+    : { ...base, top: anchorRect.bottom + 4 }
+}
+
+function NotebookPopover({ anchorRect, notebooks, todoId, onClose, onEnter }: {
+  anchorRect: DOMRect
+  notebooks: Notebook[] | null
+  todoId: string
+  onClose: () => void
+  onEnter: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const flip = anchorRect.bottom + MAX_POP_H > window.innerHeight
+
+  useEffect(() => {
+    const el = ref.current; if (!el) return
+    const r = el.getBoundingClientRect()
+    window.api.sendPopoverRect({ x: r.x, y: r.y, w: r.width, h: r.height })
+    return () => { window.api.sendPopoverRect(null) }
+  }, [notebooks])
+
+  const rowStyle: React.CSSProperties = {
+    display: 'block', width: '100%', padding: '6px 12px',
+    background: 'none', border: 'none', color: 'var(--fg)',
+    fontSize: 12, textAlign: 'left', cursor: 'pointer',
+    borderBottom: '1px solid var(--border)',
+  }
+
+  return (
+    <div
+      ref={ref}
+      onMouseEnter={onEnter}
+      onMouseLeave={onClose}
+      onPointerDown={e => e.stopPropagation()}
+      style={{
+        position: 'fixed',
+        width: 196,
+        background: 'hsl(var(--hue) 18% 12%)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.55)',
+        overflow: 'hidden',
+        animation: 'popover-in 120ms var(--ease) both',
+        ...popPos(anchorRect, flip),
+      }}
+    >
+      {notebooks === null ? (
+        <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--fg-muted)' }}>載入中…</div>
+      ) : notebooks.length === 0 ? (
+        <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--fg-muted)' }}>尚無筆記本</div>
+      ) : (
+        notebooks.map(nb => (
+          <button key={nb.id} style={rowStyle}
+            onClick={() => { void window.api.notebookOpen(nb.id); onClose() }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
+          >
+            {nb.title}
+          </button>
+        ))
+      )}
+      <button
+        style={{ ...rowStyle, borderBottom: 'none', color: 'var(--brand)' }}
+        onClick={async () => {
+          const nb = await window.api.notebookNew(todoId)
+          void window.api.notebookOpen(nb.id)
+          onClose()
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--surface-hover)' }}
+        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
+      >
+        ＋ 新筆記本
+      </button>
+    </div>
+  )
+}
+
+function BrainChatPopover({ anchorRect, todoId, onClose, onEnter }: {
+  anchorRect: DOMRect
+  todoId: string
+  onClose: () => void
+  onEnter: () => void
+}) {
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  const flip = anchorRect.bottom + MAX_POP_H > window.innerHeight
+
+  useEffect(() => {
+    setTimeout(() => taRef.current?.focus(), 0)
+    const el = ref.current; if (!el) return
+    const r = el.getBoundingClientRect()
+    window.api.sendPopoverRect({ x: r.x, y: r.y, w: r.width, h: r.height })
+    return () => { window.api.sendPopoverRect(null) }
+  }, [])
+
+  const send = async () => {
+    const t = text.trim(); if (!t || sending) return
+    setSending(true)
+    try { await window.api.notebookSendDefault(todoId, t) }
+    finally { setSending(false); onClose() }
+  }
+
+  return (
+    <div
+      ref={ref}
+      onMouseEnter={onEnter}
+      onMouseLeave={onClose}
+      onPointerDown={e => e.stopPropagation()}
+      style={{
+        position: 'fixed',
+        width: 220,
+        background: 'hsl(var(--hue) 18% 12%)',
+        border: '1px solid var(--border)',
+        borderRadius: 8,
+        boxShadow: '0 4px 16px rgba(0,0,0,0.55)',
+        padding: 10,
+        display: 'flex', flexDirection: 'column', gap: 6,
+        animation: 'popover-in 120ms var(--ease) both',
+        ...popPos(anchorRect, flip),
+      }}
+    >
+      <textarea
+        ref={taRef}
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() }
+          if (e.key === 'Escape') onClose()
+        }}
+        placeholder="傳訊息給 Claude… (Enter 送出)"
+        rows={3}
+        disabled={sending}
+        style={{
+          background: 'hsl(var(--hue) 16% 16%)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          color: 'var(--fg)', fontSize: 12,
+          padding: '6px 8px', resize: 'none', outline: 'none',
+          fontFamily: 'inherit', lineHeight: 1.45,
+          opacity: sending ? 0.6 : 1,
+        }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button
+          onClick={() => { void window.api.notebookOpenDefault(todoId); onClose() }}
+          style={{ background: 'none', border: 'none', color: 'var(--fg-muted)', fontSize: 11, cursor: 'pointer', padding: 0 }}
+        >
+          打開聊天室 →
+        </button>
+        <button
+          onClick={() => { void send() }}
+          disabled={sending || !text.trim()}
+          style={{
+            background: 'var(--brand)', border: 'none', borderRadius: 6,
+            color: '#fff', fontSize: 12, fontWeight: 600,
+            padding: '4px 10px',
+            cursor: sending || !text.trim() ? 'not-allowed' : 'pointer',
+            opacity: sending || !text.trim() ? 0.5 : 1,
+          }}
+        >
+          {sending ? '…' : '送出'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function InlineDetail({ todo, viewThoughtsSignal }: { todo: Todo; viewThoughtsSignal?: number }) {
   const [notes, setNotes] = useState(todo.notes ?? '')
   const dirty = useRef(false)
@@ -257,6 +436,40 @@ function TodoRow({ todo, index }: { todo: Todo; index: number }) {
   const [viewThoughts, setViewThoughts] = useState(0) // bumped by the "view analysis" button → opens the transcript
   const detailId = `detail-${todo.id}`
   const hasThoughts = (todo.thinkingSessionIds?.length ?? 0) > 0
+
+  // S4 — notebook icon + hover popovers
+  const [nbPop, setNbPop] = useState<{ rect: DOMRect; notebooks: Notebook[] | null } | null>(null)
+  const [brainPop, setBrainPop] = useState<DOMRect | null>(null)
+  const nbRef = useRef<HTMLButtonElement>(null)
+  const brainRef = useRef<HTMLButtonElement>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearHoverTimer = () => { if (hoverTimer.current) { clearTimeout(hoverTimer.current); hoverTimer.current = null } }
+  const closePopovers = () => { setNbPop(null); setBrainPop(null) }
+
+  useEffect(() => {
+    if (!nbPop && !brainPop) return
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') closePopovers() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!nbPop, !!brainPop])
+
+  const onNbEnter = () => {
+    clearHoverTimer(); setBrainPop(null)
+    hoverTimer.current = setTimeout(async () => {
+      const r = nbRef.current?.getBoundingClientRect(); if (!r) return
+      setNbPop({ rect: r, notebooks: null })
+      const nbs = await window.api.notebookList(todo.id)
+      setNbPop(prev => prev ? { rect: prev.rect, notebooks: nbs } : null)
+    }, 150)
+  }
+  const onBrainEnter = () => {
+    clearHoverTimer(); setNbPop(null)
+    hoverTimer.current = setTimeout(() => {
+      const r = brainRef.current?.getBoundingClientRect(); if (r) setBrainPop(r)
+    }, 150)
+  }
+  const onBtnLeave = () => { clearHoverTimer(); hoverTimer.current = setTimeout(closePopovers, 200) }
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -333,15 +546,29 @@ function TodoRow({ todo, index }: { todo: Todo; index: number }) {
             </button>
           )}
           <button
+            ref={brainRef}
             onClick={async () => {
               if (thinkBusy) return
               setThinkBusy(true)
               try { await window.api.thinkNow(todo.id) } finally { setThinkBusy(false) }
             }}
+            onMouseEnter={onBrainEnter}
+            onMouseLeave={onBtnLeave}
             disabled={thinkBusy}
             className={`row-btn text-[var(--fg)] hover:text-[var(--brand)] ${thinkBusy ? 'opacity-50 animate-pulse cursor-wait' : ''} ${(todo.thinkingSessionIds?.length ?? 0) > 0 ? 'text-[var(--brand)]' : ''}`}
-            aria-label="Think — plan the prep with Claude" data-btn="think">
+            aria-label="Think — plan the prep with Claude (hover for quick chat)" data-btn="think">
             <Brain size={14} />
+          </button>
+          <button
+            ref={nbRef}
+            onClick={() => { void window.api.notebookOpenDefault(todo.id) }}
+            onMouseEnter={onNbEnter}
+            onMouseLeave={onBtnLeave}
+            className={`row-btn hover:text-[var(--brand)] ${(todo.notebookIds?.length ?? 0) > 0 ? 'text-[var(--brand)]' : 'text-[var(--fg)]'}`}
+            aria-label="Notebook — open or manage notebooks for this task"
+            data-btn="notebook"
+          >
+            <NotebookIcon size={14} />
           </button>
           {/* Delete — always mounted (stable layout, keyboard-reachable); 2-click confirm (forgiveness) */}
           <button
@@ -354,6 +581,25 @@ function TodoRow({ todo, index }: { todo: Todo; index: number }) {
           </button>
         </div>
       </div>
+
+      {/* S4 row-button popovers (position:fixed — escape panel overflow; click-through covered by panel:popoverRect) */}
+      {nbPop && (
+        <NotebookPopover
+          anchorRect={nbPop.rect}
+          notebooks={nbPop.notebooks}
+          todoId={todo.id}
+          onClose={closePopovers}
+          onEnter={clearHoverTimer}
+        />
+      )}
+      {brainPop && (
+        <BrainChatPopover
+          anchorRect={brainPop}
+          todoId={todo.id}
+          onClose={closePopovers}
+          onEnter={clearHoverTimer}
+        />
+      )}
 
       {/* ponytail: inline detail — ALWAYS mounted; .detail-accordion animates height (grid-rows
           0fr↔1fr) so opening/closing smoothly pushes the rows below. data-open drives it. */}

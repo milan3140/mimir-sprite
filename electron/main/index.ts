@@ -7,6 +7,7 @@ import { initDebugLog } from './debugLog'
 import { initStore, getTodos, getAppState, getPanelSize } from './store'
 import { setupTestControl } from './testControl'
 import { startThinkScheduler, stopThinkScheduler } from './thinkScheduler'
+import { closeAllNotebooks } from './notebookManager'
 
 // ponytail: disable-gpu-compositing prevents the Win11 transparent-window-renders-black bug
 app.commandLine.appendSwitch('disable-gpu-compositing')
@@ -49,6 +50,7 @@ app.whenReady().then(async () => {
 // poll/listeners, testControl server + port file). Guard each so one failure can't block quit.
 app.on('will-quit', () => {
   stopThinkScheduler()
+  closeAllNotebooks()
   for (const fn of teardown.splice(0)) { try { fn() } catch { /* best-effort on quit */ } }
 })
 

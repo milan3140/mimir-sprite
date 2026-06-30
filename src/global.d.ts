@@ -1,4 +1,4 @@
-import type { Todo, StoreSnapshot, Attachment, Bubble, ThinkingSession } from './shared/types'
+import type { Todo, StoreSnapshot, Attachment, Bubble, ThinkingSession, Notebook } from './shared/types'
 
 declare global {
   interface Window {
@@ -47,6 +47,16 @@ declare global {
       onThinkMeta: (cb: (m: { sid: string; rawAnswer: string }) => void) => () => void
       sendBubblesRect: (rect: { x: number; y: number; w: number; h: number } | null) => void
       onThinkClear: (cb: () => void) => () => void
+      // Notebook IPC (S1)
+      notebookList: (todoId: string) => Promise<Notebook[]>
+      notebookGet: (id: string) => Promise<Notebook | null>
+      notebookNew: (todoId: string) => Promise<Notebook>
+      notebookOpen: (id: string) => Promise<void>
+      notebookOpenDefault: (todoId: string) => Promise<string>
+      notebookSend: (id: string, text: string) => Promise<void>
+      notebookSendDefault: (todoId: string, text: string) => Promise<void>
+      sendPopoverRect: (rect: { x: number; y: number; w: number; h: number } | null) => void
+      onNotebookUpdated: (cb: (nb: Notebook) => void) => () => void
     }
   }
 }

@@ -4,7 +4,8 @@ import { writeFileSync, mkdirSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { dlog } from './debugLog'
 import { streamMockThinking, streamRealThinking } from './thinking'
-import { addTodo, setPanelSize } from './store'
+import { addTodo, setPanelSize, getOrCreateDefaultNotebook } from './store'
+import { openNotebook, getNotebookWindow } from './notebookManager'
 
 // ⚠️ FIDELITY CAVEAT (important): injected input is NOT a faithful substitute for a real mouse. A real
 // grab/click goes OS cursor → Windows hit-test → setIgnoreMouseEvents (click-through) → renderer.
@@ -110,6 +111,29 @@ async function handle(win: BrowserWindow, sock: Socket, line: string): Promise<v
   } else if (cmd === 'setpanel') {
     await setPanelSize(+args[0], +args[1])
     sock.write('OK\n')
+  } else if (cmd === 'notebooksend') {
+    // notebooksend <notebookId> <text> — send a chat message to a notebook (FAKE mode: no spend)
+    // returns OK <messageCount>
+    const [nbId, ...words] = rest.split(/\s+/)
+    const text = words.join(' ') || '測試訊息'
+    const { sendNotebookMessage } = await import('./notebookChat')
+    const { broadcastNotebook } = await import('./notebookManager')
+    await sendNotebookMessage(win, nbId, text, broadcastNotebook)
+    const { getNotebook } = await import('./store')
+    const updated = getNotebook(nbId)
+    sock.write('OK ' + (updated?.messages.length ?? 0) + '\n')
+  } else if (cmd === 'notebooknew') {
+    // create todo + default notebook + open window; returns notebookId (for notebookshot)
+    const todo = await addTodo(rest || '筆記本測試')
+    const nb = await getOrCreateDefaultNotebook(todo.id)
+    openNotebook(nb.id)
+    sock.write('OK ' + nb.id + '\n')
+  } else if (cmd === 'notebookshot') {
+    // capture a notebook window by id (the id returned by notebooknew)
+    const nbWin = getNotebookWindow(args[0])
+    if (!nbWin) { sock.write('ERR no-window ' + args[0] + '\n'); return }
+    const img = await nbWin.webContents.capturePage()
+    sock.write('OK ' + img.toPNG().toString('base64') + '\n')
   } else if (cmd === 'shot') {
     const img = await win.webContents.capturePage()
     sock.write('OK ' + img.toPNG().toString('base64') + '\n')

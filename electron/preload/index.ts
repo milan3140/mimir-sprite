@@ -94,4 +94,19 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('think:clear', h)
     return () => { ipcRenderer.removeListener('think:clear', h) }
   },
+
+  // Notebook IPC (S1)
+  notebookList: (todoId: string) => ipcRenderer.invoke('notebook:list', todoId),
+  notebookGet: (id: string) => ipcRenderer.invoke('notebook:get', id),
+  notebookNew: (todoId: string) => ipcRenderer.invoke('notebook:new', todoId),
+  notebookOpen: (id: string) => ipcRenderer.invoke('notebook:open', id),
+  notebookOpenDefault: (todoId: string) => ipcRenderer.invoke('notebook:openDefault', todoId),
+  notebookSend: (id: string, text: string) => ipcRenderer.invoke('notebook:send', id, text),
+  notebookSendDefault: (todoId: string, text: string) => ipcRenderer.invoke('notebook:sendDefault', todoId, text),
+  sendPopoverRect: (rect: { x: number; y: number; w: number; h: number } | null) => ipcRenderer.send('panel:popoverRect', rect),
+  onNotebookUpdated: (cb: (nb: unknown) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, nb: unknown): void => { cb(nb) }
+    ipcRenderer.on('notebook:updated', h)
+    return () => { ipcRenderer.removeListener('notebook:updated', h) }
+  },
 })

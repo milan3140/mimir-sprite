@@ -4,10 +4,12 @@ import { hideToNub, restoreFromNub } from './windowManager'
 import {
   getTodos, getAppState, getSnapshot, addTodo, updateTodo, removeTodo,
   reorderTodos, startTodo, pauseTodo, completeTodo, setMode, addAttachmentToTodo, setPanelSize,
-  getThinkingSessions
+  getThinkingSessions, getNotebooks, getNotebook, createNotebook, getOrCreateDefaultNotebook,
 } from './store'
 import { saveImageAttachment, readAttachmentDataUrl } from './attachments'
 import { streamRealThinking } from './thinking'
+import { openNotebook, broadcastNotebook } from './notebookManager'
+import { sendNotebookMessage } from './notebookChat'
 import type { StoreSnapshot } from '../../src/shared/types'
 
 export function setupIpc(win: BrowserWindow): void {
@@ -48,6 +50,24 @@ export function setupIpc(win: BrowserWindow): void {
   ipcMain.on('window:restore', () => restoreFromNub(win))
   // ponytail: panel element rects for self-test probes
   ipcMain.on('panel:rects', (_e, rects: unknown) => dlog('panel:rects', rects))
+
+  // Notebook IPC (S1 wiring)
+  ipcMain.handle('notebook:list', (_e, todoId: string) => getNotebooks(todoId))
+  ipcMain.handle('notebook:get', (_e, id: string) => getNotebook(id) ?? null)
+  ipcMain.handle('notebook:new', (_e, todoId: string) => createNotebook(todoId))
+  ipcMain.handle('notebook:open', (_e, id: string) => { openNotebook(id) })
+  ipcMain.handle('notebook:openDefault', async (_e, todoId: string) => {
+    const nb = await getOrCreateDefaultNotebook(todoId)
+    openNotebook(nb.id)
+    return nb.id
+  })
+  ipcMain.handle('notebook:send', async (_e, id: string, text: string) => {
+    await sendNotebookMessage(win, id, text, broadcastNotebook)
+  })
+  ipcMain.handle('notebook:sendDefault', async (_e, todoId: string, text: string) => {
+    const nb = await getOrCreateDefaultNotebook(todoId)
+    await sendNotebookMessage(win, nb.id, text, broadcastNotebook)
+  })
 }
 
 /** Called by store on every mutation to push snapshot to renderer */
