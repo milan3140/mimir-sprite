@@ -1,6 +1,6 @@
 import { BrowserWindow, app } from 'electron'
 import { createServer, Socket } from 'net'
-import { writeFileSync, mkdirSync } from 'fs'
+import { writeFileSync, mkdirSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { dlog } from './debugLog'
 import { streamMockThinking, streamRealThinking } from './thinking'
@@ -28,7 +28,7 @@ let injected: { x: number; y: number } | null = null
 export function getInjectedCursor(): { x: number; y: number } | null { return injected }
 export function isTestControl(): boolean { return process.env.MIMIR_TEST_CONTROL === '1' }
 
-export function setupTestControl(win: BrowserWindow): void {
+export function setupTestControl(win: BrowserWindow): (() => void) | void {
   if (!isTestControl()) return
   injected = { x: 0, y: 0 }
   const server = createServer((sock) => {
@@ -54,6 +54,13 @@ export function setupTestControl(win: BrowserWindow): void {
     writeFileSync(join(dir, 'test_control_port'), String(port))
     dlog('testControl:listening', { port, userData: app.getPath('userData') })
   })
+  // teardown (app will-quit): close the socket server + remove the port file, so the NEXT run's probe
+  // can't read a stale (dead) port and hit ConnectionRefused before the new server is up.
+  return () => {
+    try { server.close() } catch { /* already down */ }
+    try { unlinkSync(join(process.cwd(), 'state', 'test_control_port')) } catch { /* no file */ }
+    injected = null
+  }
 }
 
 async function handle(win: BrowserWindow, sock: Socket, line: string): Promise<void> {

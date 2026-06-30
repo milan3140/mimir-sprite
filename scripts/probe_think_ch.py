@@ -105,7 +105,18 @@ def main():
             time.sleep(0.2)
         done = last_json("think:run-done")
         check("runner completed", bool(done), json.dumps(done, ensure_ascii=False) if done else "no run-done")
-        check("parsed to 9 bubbles", bool(done) and done.get("nBubbles") == 9, f"nBubbles={done.get('nBubbles') if done else '?'}")
+        check("parsed to bubbles", bool(done) and done.get("nBubbles", 0) >= 9, f"nBubbles={done.get('nBubbles') if done else '?'}")
+        # first bubble must be the task-definition ([任務] …) — context-grounded thinking opens by naming the task
+        first_b = None
+        for ln in lines():
+            if "think:bubble" in ln:
+                mm = re.search(r"\{.*\}", ln)
+                if mm:
+                    try:
+                        first_b = json.loads(mm.group(0)); break
+                    except Exception:
+                        pass
+        check("first bubble is [任務] task definition", bool(first_b) and first_b.get("idx") == 0 and first_b.get("tag") == "任務", str(first_b))
         check("no real spend (cost 0)", bool(done) and float(done.get("costUsd", -1)) == 0.0, f"costUsd={done.get('costUsd') if done else '?'}")
         check("no parse-skips", count("think:parse-skip") == 0, f"{count('think:parse-skip')} skipped")
         check("no runner error", count("think:run-error") == 0 and count("think:retry") == 0)

@@ -26,9 +26,14 @@ interface AppStore {
   bubbles: Bubble[]
   thinking: boolean
   pushBubble: (b: Bubble) => void
-  fadeBubble: (idx: number) => void
-  removeBubble: (idx: number) => void
+  fadeBubble: (idx: number, sid?: string) => void
+  removeBubble: (idx: number, sid?: string) => void
   clearBubbles: () => void
+  // full stage-1 plan for the current session (click a bubble → show it)
+  transcript: { sid: string; rawAnswer: string } | null
+  transcriptOpen: boolean
+  setTranscript: (t: { sid: string; rawAnswer: string }) => void
+  setTranscriptOpen: (v: boolean) => void
   applySnapshot: (snap: StoreSnapshot) => void
 }
 
@@ -51,14 +56,19 @@ export const useAppStore = create<AppStore>((set) => ({
   setLivePanel: (v) => set({ livePanel: v }),
   bubbles: [],
   thinking: false,
-  // each bubble has its own lifecycle; cap at 8 as a safety backstop (independent fades usually keep ~3-4)
-  pushBubble: (b) => set((s) => ({ thinking: true, bubbles: [...s.bubbles.filter((x) => x.idx !== b.idx), b].slice(-8) })),
-  fadeBubble: (idx) => set((s) => ({ bubbles: s.bubbles.map((b) => (b.idx === idx ? { ...b, fading: true } : b)) })),
-  removeBubble: (idx) => set((s) => {
-    const left = s.bubbles.filter((b) => b.idx !== idx)
+  // each bubble has its own lifecycle; keyed by sessionId+idx (idx repeats across sessions — A-H4).
+  // cap at 6 as an overflow backstop (independent fades usually keep ~3-4 visible — B-HIGH).
+  pushBubble: (b) => set((s) => ({ thinking: true, bubbles: [...s.bubbles.filter((x) => !(x.idx === b.idx && x.sessionId === b.sessionId)), b].slice(-6) })),
+  fadeBubble: (idx, sid) => set((s) => ({ bubbles: s.bubbles.map((b) => (b.idx === idx && b.sessionId === sid ? { ...b, fading: true } : b)) })),
+  removeBubble: (idx, sid) => set((s) => {
+    const left = s.bubbles.filter((b) => !(b.idx === idx && b.sessionId === sid))
     return { bubbles: left, thinking: left.length > 0 }
   }),
   clearBubbles: () => set({ bubbles: [], thinking: false }),
+  transcript: null,
+  transcriptOpen: false,
+  setTranscript: (t) => set({ transcript: t, transcriptOpen: false }),  // new session → reset overlay closed
+  setTranscriptOpen: (v) => set({ transcriptOpen: v }),
   applySnapshot: (snap) => set({
     todos: snap.todos, appMode: snap.appState,
     ...(snap.panel ? { panelW: snap.panel.w, panelH: snap.panel.h } : {}),

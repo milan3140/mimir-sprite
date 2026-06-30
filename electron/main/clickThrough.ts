@@ -20,7 +20,7 @@ import { getInjectedCursor } from './testControl'
  * setIgnoreMouseEvents whenever it resumes after a skipped tick (a transition just changed the real
  * state) OR the hit-state changes — so the flag can never drift from reality.
  */
-export function setupClickThrough(win: BrowserWindow): void {
+export function setupClickThrough(win: BrowserWindow): () => void {
   win.setIgnoreMouseEvents(true, { forward: true })
 
   // Z-ORDER: a transparent always-on-top window can be demoted below other windows (Windows lets
@@ -31,6 +31,7 @@ export function setupClickThrough(win: BrowserWindow): void {
   win.on('blur', () => { if (!win.isDestroyed()) win.setAlwaysOnTop(true, 'screen-saver') })
 
   let catRect = { x: 0, y: 0, w: 0, h: 0 } // sprite box within the window (DIP), from the renderer
+  let bubblesRect: { x: number; y: number; w: number; h: number } | null = null // clickable speech-bubble/transcript region
   let lastOver: boolean | null = null      // last applied interactive state; null = must re-assert
   let skippedLast = true                    // last tick was skipped (a transition may have changed state)
   let outsideSince = 0
@@ -38,6 +39,11 @@ export function setupClickThrough(win: BrowserWindow): void {
 
   ipcMain.on('cat:rect', (_e, r: { x: number; y: number; w: number; h: number }) => {
     if (r) catRect = r
+  })
+  // the renderer reports the speech-bubble (or transcript-overlay) bounds so clicking a bubble works
+  // (the window must be interactive there); null when no bubbles/overlay are shown.
+  ipcMain.on('bubbles:rect', (_e, r: { x: number; y: number; w: number; h: number } | null) => {
+    bubblesRect = r
   })
   // while resizing, keep the window interactive (so the renderer keeps receiving mousemove) and DON'T
   // collapse — the grip drags outside the panel hit-rect, which would otherwise kill the drag.
@@ -51,7 +57,7 @@ export function setupClickThrough(win: BrowserWindow): void {
     lastOver = over
   }
 
-  setInterval(() => {
+  const timer = setInterval(() => {
     if (win.isDestroyed() || !win.isVisible() || isHidden() || isSnapping() || isDragging()) {
       skippedLast = true // next active tick must re-assert: the transition owns the mouse state now
       return
@@ -73,7 +79,11 @@ export function setupClickThrough(win: BrowserWindow): void {
       }
     }
 
-    const over = onCat || onPanel || resizing
+    const onBubbles = !!bubblesRect &&
+      relX >= bubblesRect.x && relX <= bubblesRect.x + bubblesRect.w &&
+      relY >= bubblesRect.y && relY <= bubblesRect.y + bubblesRect.h
+
+    const over = onCat || onPanel || resizing || onBubbles
     if (over && lastOver !== true) win.moveTop() // raise to top the instant the cursor reaches it
     applyInteractive(over) // click-through unless over the cat or the open panel
     skippedLast = false
@@ -89,4 +99,12 @@ export function setupClickThrough(win: BrowserWindow): void {
       outsideSince = 0
     }
   }, 100)
+
+  // teardown (app will-quit): stop the poll + drop the ipc listeners so nothing fires post-quit.
+  return () => {
+    clearInterval(timer)
+    ipcMain.removeAllListeners('cat:rect')
+    ipcMain.removeAllListeners('bubbles:rect')
+    ipcMain.removeAllListeners('panel:resizing')
+  }
 }

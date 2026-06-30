@@ -11,7 +11,7 @@ import {
   SortableContext, verticalListSortingStrategy, useSortable, arrayMove
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import type { Todo, Attachment } from '../shared/types'
+import type { Todo, Attachment, ThinkingSession } from '../shared/types'
 import { clampPanel } from '../shared/geometry'
 
 // --- Resize grip: drag to change the panel size (persisted). The dimension that's centred on the cat
@@ -162,7 +162,48 @@ function EditableTitle({ todo, onDone }: { todo: Todo; onDone: () => void }) {
 // indented extension of the row (aligned under the title), animating open via the CSS grid-rows trick.
 // The row's chevron is the only toggle (no header, no ×).
 
-function InlineDetail({ todo }: { todo: Todo }) {
+// Task 4 — transcript view: the full stage-1 plan ("rawAnswer") of the cat's thinking, persisted per todo.
+// Inline disclosure (not a modal-in-modal, per the design gate). The bubbles are the compressed teaser;
+// this is the complete plan.
+function ThinkingTranscript({ todo, openSignal }: { todo: Todo; openSignal?: number }) {
+  const [sessions, setSessions] = useState<ThinkingSession[]>([])
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const n = todo.thinkingSessionIds?.length ?? 0
+  useEffect(() => {
+    if (n === 0) { setSessions([]); return }
+    let alive = true
+    window.api.thinkSessions(todo.id).then(s => { if (alive) setSessions(s) }).catch(() => { /* none */ })
+    return () => { alive = false }
+  }, [todo.id, n])
+  // the row's "view analysis" button bumps openSignal → expand + scroll into view so the user lands on the full text
+  useEffect(() => {
+    if (!openSignal) return
+    setOpen(true)
+    requestAnimationFrame(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }))
+  }, [openSignal])
+  if (!sessions.length) return null
+  const latest = sessions[sessions.length - 1]
+  const when = new Date(latest.createdAt).toLocaleString()
+  return (
+    <div className="detail-transcript" data-transcript ref={ref}>
+      <button
+        className="detail-transcript-toggle"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        title="看完整想法 (stage-1 規劃)"
+      >
+        <Brain size={11} />
+        <span>想法{sessions.length > 1 ? ` ×${sessions.length}` : ''}</span>
+        <span className="detail-transcript-meta">{when}{latest.costUsd > 0 ? ` · $${latest.costUsd.toFixed(3)}` : ''}{latest.status === 'error' ? ' · ⚠' : ''}</span>
+        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+      </button>
+      {open && <pre className="detail-transcript-body">{latest.rawAnswer?.trim() || '(沒有內容)'}</pre>}
+    </div>
+  )
+}
+
+function InlineDetail({ todo, viewThoughtsSignal }: { todo: Todo; viewThoughtsSignal?: number }) {
   const [notes, setNotes] = useState(todo.notes ?? '')
   const dirty = useRef(false)
 
@@ -199,6 +240,7 @@ function InlineDetail({ todo }: { todo: Todo }) {
           {atts.map(a => <AttachmentThumb key={a.id} att={a} />)}
         </div>
       )}
+      <ThinkingTranscript todo={todo} openSignal={viewThoughtsSignal} />
       <div className="detail-meta">{metaLine(todo)}</div>
     </div>
   )
@@ -206,12 +248,15 @@ function InlineDetail({ todo }: { todo: Todo }) {
 
 // --- Sortable todo row ---
 
-function TodoRow({ todo }: { todo: Todo }) {
+function TodoRow({ todo, index }: { todo: Todo; index: number }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: todo.id })
-  const [hovered, setHovered] = useState(false)
   const [editing, setEditing] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [thinkBusy, setThinkBusy] = useState(false)  // M5: guards against double-trigger (= double spend)
+  const [confirmDel, setConfirmDel] = useState(false) // destructive-action guard: click once to arm, again to delete
+  const [viewThoughts, setViewThoughts] = useState(0) // bumped by the "view analysis" button → opens the transcript
+  const detailId = `detail-${todo.id}`
+  const hasThoughts = (todo.thinkingSessionIds?.length ?? 0) > 0
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -222,26 +267,30 @@ function TodoRow({ todo }: { todo: Todo }) {
 
   return (
     <div ref={setNodeRef} style={style} data-todo-id={todo.id}>
-      {/* Row */}
+      {/* Row — the WHOLE row is the drag handle (grab any blank space to reorder). The 4px PointerSensor
+          activation distance means clicks/double-clicks don't start a drag, so rename + control clicks
+          still work; the controls stopPropagation on pointerdown as a belt-and-suspenders. */}
       <div
-        className="flex items-center gap-1 px-1 py-0.5 rounded-sm hover:bg-[var(--surface-hover)]"
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        {...attributes}
-        {...listeners}
+        className="group flex items-center gap-1 px-1 py-0.5 rounded-sm hover:bg-[var(--surface-hover)] cursor-grab active:cursor-grabbing"
+        onMouseLeave={() => setConfirmDel(false)}
+        {...attributes} {...listeners}
       >
         {/* left brand bar for active item */}
         <div className={`w-0.5 self-stretch rounded-full ${isActive ? 'bg-[var(--brand)]' : 'bg-transparent'}`} />
 
-        {/* fold/expand chevron */}
+        {/* position ordinal (replaces the grip icon) */}
+        <span className="row-num" aria-hidden="true">{index + 1}.</span>
+
+        {/* fold/expand chevron — single icon, rotates on open (no instant swap) */}
         <button
           onClick={(e) => { e.stopPropagation(); setDetailOpen(v => !v) }}
           onPointerDown={e => e.stopPropagation()}
-          className="text-[var(--fg-muted)] hover:text-[var(--fg)] shrink-0"
-          aria-label={detailOpen ? 'Collapse' : 'Expand'}
+          className="row-btn text-[var(--fg-muted)] hover:text-[var(--fg)]"
+          aria-label={detailOpen ? 'Collapse details' : 'Expand details'}
+          aria-expanded={detailOpen} aria-controls={detailId}
           data-btn="chevron"
         >
-          {detailOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          <span className="chevron-rot" data-open={detailOpen}><ChevronRight size={14} /></span>
         </button>
 
         {/* Title */}
@@ -250,7 +299,7 @@ function TodoRow({ todo }: { todo: Todo }) {
         ) : (
           <span
             data-row-title
-            className="flex-1 text-xs text-[var(--fg)] truncate select-none"
+            className="flex-1 text-[13px] text-[var(--fg)] truncate select-none"
             onDoubleClick={(e) => { e.stopPropagation(); setEditing(true) }}
             title="Double-click to rename"
           >
@@ -266,20 +315,20 @@ function TodoRow({ todo }: { todo: Todo }) {
           </span>
         )}
 
-        {/* Controls */}
-        <div className="flex items-center gap-0.5 shrink-0" onPointerDown={e => e.stopPropagation()}>
+        {/* Controls — each in a ≥24px hit box (WCAG 2.5.8) */}
+        <div className="flex items-center shrink-0" onPointerDown={e => e.stopPropagation()}>
           {(todo.status === 'pending' || todo.status === 'paused') && (
-            <button onClick={() => window.api.todoStart(todo.id)} className="text-[var(--fg)] hover:text-[var(--success)]" aria-label="Start" data-btn="start">
+            <button onClick={() => window.api.todoStart(todo.id)} className="row-btn text-[var(--fg)] hover:text-[var(--success)]" aria-label="Start" data-btn="start">
               <Play size={14} />
             </button>
           )}
           {isActive && (
-            <button onClick={() => window.api.todoPause(todo.id)} className="text-[var(--fg)] hover:text-[var(--warning)]" aria-label="Pause" data-btn="pause">
+            <button onClick={() => window.api.todoPause(todo.id)} className="row-btn text-[var(--fg)] hover:text-[var(--warning)]" aria-label="Pause" data-btn="pause">
               <Pause size={14} />
             </button>
           )}
           {(isActive || todo.status === 'paused') && (
-            <button onClick={() => window.api.todoComplete(todo.id)} className="text-[var(--fg)] hover:text-[var(--success)]" aria-label="Complete" data-btn="complete">
+            <button onClick={() => window.api.todoComplete(todo.id)} className="row-btn text-[var(--fg)] hover:text-[var(--success)]" aria-label="Complete" data-btn="complete">
               <Check size={14} />
             </button>
           )}
@@ -290,21 +339,25 @@ function TodoRow({ todo }: { todo: Todo }) {
               try { await window.api.thinkNow(todo.id) } finally { setThinkBusy(false) }
             }}
             disabled={thinkBusy}
-            className={`text-[var(--fg)] hover:text-[var(--brand)] ${thinkBusy ? 'opacity-50 animate-pulse cursor-wait' : ''}`}
+            className={`row-btn text-[var(--fg)] hover:text-[var(--brand)] ${thinkBusy ? 'opacity-50 animate-pulse cursor-wait' : ''} ${(todo.thinkingSessionIds?.length ?? 0) > 0 ? 'text-[var(--brand)]' : ''}`}
             aria-label="Think — plan the prep with Claude" data-btn="think">
             <Brain size={14} />
           </button>
-          {hovered && (
-            <button onClick={() => window.api.todoRemove(todo.id)} className="text-[var(--fg)] hover:text-[var(--danger)]" aria-label="Delete" data-btn="delete">
-              <Trash2 size={14} />
-            </button>
-          )}
+          {/* Delete — always mounted (stable layout, keyboard-reachable); 2-click confirm (forgiveness) */}
+          <button
+            onClick={() => { if (confirmDel) { window.api.todoRemove(todo.id) } else { setConfirmDel(true); setTimeout(() => setConfirmDel(false), 3000) } }}
+            className={`row-btn opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity ${confirmDel ? 'text-[var(--danger)] !opacity-100' : 'text-[var(--fg)] hover:text-[var(--danger)]'}`}
+            aria-label={confirmDel ? 'Click again to confirm delete' : 'Delete'}
+            title={confirmDel ? '再點一次確認刪除' : 'Delete'}
+            data-btn="delete" data-confirm={confirmDel}>
+            {confirmDel ? <Check size={14} /> : <Trash2 size={14} />}
+          </button>
         </div>
       </div>
 
       {/* ponytail: inline detail — ALWAYS mounted; .detail-accordion animates height (grid-rows
           0fr↔1fr) so opening/closing smoothly pushes the rows below. data-open drives it. */}
-      <div className="detail-accordion" data-open={detailOpen} data-detail-for={todo.id}>
+      <div className="detail-accordion" id={detailId} role="region" data-open={detailOpen} data-detail-for={todo.id}>
         <div className="detail-accordion-inner">
           <InlineDetail todo={todo} />
         </div>
@@ -461,11 +514,14 @@ export function TodoPanel({ edge }: { edge: string }) {
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-1 min-h-0">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={visible.map(t => t.id)} strategy={verticalListSortingStrategy}>
-            {visible.map(todo => <TodoRow key={todo.id} todo={todo} />)}
+            {visible.map((todo, i) => <TodoRow key={todo.id} todo={todo} index={i} />)}
           </SortableContext>
         </DndContext>
         {visible.length === 0 && (
-          <p className="text-xs text-center py-4" style={{ color: 'var(--fg-faint)' }}>No todos yet</p>
+          <div className="text-center py-4 select-none" style={{ color: 'var(--fg-faint)' }}>
+            <p className="text-xs">還沒有待辦</p>
+            <p className="text-[10px] mt-1 opacity-80">在下方輸入新增一個 ↓</p>
+          </div>
         )}
       </div>
 

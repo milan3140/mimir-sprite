@@ -6,7 +6,7 @@ import { setupIpc, broadcastStore } from './ipc'
 import { initDebugLog } from './debugLog'
 import { initStore, getTodos, getAppState, getPanelSize } from './store'
 import { setupTestControl } from './testControl'
-import { startThinkScheduler } from './thinkScheduler'
+import { startThinkScheduler, stopThinkScheduler } from './thinkScheduler'
 
 // ponytail: disable-gpu-compositing prevents the Win11 transparent-window-renders-black bug
 app.commandLine.appendSwitch('disable-gpu-compositing')
@@ -19,14 +19,16 @@ if (process.env.MIMIR_TEST_USERDATA) {
 }
 
 let win: BrowserWindow | null = null
+const teardown: Array<() => void> = []   // cleanup fns run on will-quit (clear intervals / close server / drop ipc)
 
 app.whenReady().then(async () => {
   initDebugLog()
   win = createWindow()
   setupIpc(win)
-  setupClickThrough(win)
+  teardown.push(setupClickThrough(win))
   setupTray(win)
-  setupTestControl(win) // test-control channel (MIMIR_TEST_CONTROL=1) — inject input, no OS cursor
+  const stopTestControl = setupTestControl(win) // test-control channel (MIMIR_TEST_CONTROL=1) — inject input, no OS cursor
+  if (stopTestControl) teardown.push(stopTestControl)
 
   // init store — broadcast changes to renderer
   const w = win
@@ -41,6 +43,13 @@ app.whenReady().then(async () => {
 
   // M5 auto-think — gated OFF by default (see getThinkSettings); never auto-spends unless the user opts in.
   startThinkScheduler(w)
+})
+
+// single teardown point: stop the auto-think scheduler + run every registered cleanup (clickThrough
+// poll/listeners, testControl server + port file). Guard each so one failure can't block quit.
+app.on('will-quit', () => {
+  stopThinkScheduler()
+  for (const fn of teardown.splice(0)) { try { fn() } catch { /* best-effort on quit */ } }
 })
 
 app.on('window-all-closed', () => app.quit())

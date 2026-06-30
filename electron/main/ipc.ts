@@ -3,7 +3,8 @@ import { dlog } from './debugLog'
 import { hideToNub, restoreFromNub } from './windowManager'
 import {
   getTodos, getAppState, getSnapshot, addTodo, updateTodo, removeTodo,
-  reorderTodos, startTodo, pauseTodo, completeTodo, setMode, addAttachmentToTodo, setPanelSize
+  reorderTodos, startTodo, pauseTodo, completeTodo, setMode, addAttachmentToTodo, setPanelSize,
+  getThinkingSessions
 } from './store'
 import { saveImageAttachment, readAttachmentDataUrl } from './attachments'
 import { streamRealThinking } from './thinking'
@@ -34,12 +35,14 @@ export function setupIpc(win: BrowserWindow): void {
   // user dragged the panel resize handle (clamped to geometry MIN/MAX, persisted)
   ipcMain.handle('panel:resize', (_e, w: number, h: number) => setPanelSize(w, h))
 
-  // M5: manual 🧠 — run the two-stage ClaudeRunner for one todo, stream the bubbles. Spends a Claude call.
+  // M5: manual 🧠 — run the two-stage ClaudeRunner for one todo, stream the bubbles, PERSIST the session.
   ipcMain.handle('think:now', async (_e, id: string) => {
     const todo = getTodos().find((t) => t.id === id)
     if (!todo) { dlog('think:now-missing', { id }); return }
-    await streamRealThinking(win, todo.title, todo.notes ?? '')
+    await streamRealThinking(win, todo.title, todo.notes ?? '', 1, todo.id, 'manual')
   })
+  // M5 transcript view (Task 4): the persisted thinking sessions for a todo (rawAnswer = full stage-1 plan).
+  ipcMain.handle('think:sessions', (_e, todoId: string) => getThinkingSessions(todoId))
 
   ipcMain.on('window:hide', () => hideToNub(win))
   ipcMain.on('window:restore', () => restoreFromNub(win))

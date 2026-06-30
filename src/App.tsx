@@ -35,6 +35,8 @@ function CatPeek({ edge }: { edge: string }) {
       onClick={() => window.api.windowRestore()}
       title="Click to show Mimir (Ctrl+Alt+Space)"
     >
+      {/* NOTE: do NOT add a transform/bob animation here — it moves the ears off the flush edge. The ears
+          must stay flush to the screen edge (both ears visible). */}
       <div style={ears} />
     </div>
   )
@@ -56,6 +58,7 @@ export default function App() {
   const fadeBubble = useAppStore(s => s.fadeBubble)
   const removeBubble = useAppStore(s => s.removeBubble)
   const clearBubbles = useAppStore(s => s.clearBubbles)
+  const setTranscript = useAppStore(s => s.setTranscript)
   const applySnapshot = useAppStore(s => s.applySnapshot)
   // window origin + work area (sent by main on expand) — lets us clamp a big panel into the work area
   const [panelGeo, setPanelGeo] = useState<{ winX: number; winY: number; wa: { x: number; y: number; width: number; height: number } } | null>(null)
@@ -73,11 +76,13 @@ export default function App() {
   }), [setExpandedState])
   useEffect(() => window.api.onHiddenChanged(setHiddenState), [setHiddenState])
   useEffect(() => window.api.onThinkBubble(pushBubble), [pushBubble])
-  // fade the bubble out (CSS), then drop it from the stack once the animation has played
-  useEffect(() => window.api.onThinkRemove((idx) => {
-    fadeBubble(idx)
-    setTimeout(() => removeBubble(idx), 420)
+  // fade the bubble out (CSS), then drop it once the animation has played — matched by session+idx so an
+  // old session's deferred removal can't delete a new session's same-idx bubble (A-H4).
+  useEffect(() => window.api.onThinkRemove(({ idx, sid }) => {
+    fadeBubble(idx, sid)
+    setTimeout(() => removeBubble(idx, sid), 420)
   }), [fadeBubble, removeBubble])
+  useEffect(() => window.api.onThinkMeta(setTranscript), [setTranscript])
   useEffect(() => window.api.onThinkClear(clearBubbles), [clearBubbles])
 
   // ponytail: nub mode — tiny tab, nothing else

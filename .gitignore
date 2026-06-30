@@ -14,3 +14,9 @@ _*_shots*/
 _audit/
 _probe_shots/
 scripts/_*.png
+
+# throwaway scratch (probe/think test artifacts)
+_*.png
+_*.txt
+_*.jsonl
+_probe_userdata/

@@ -71,16 +71,24 @@ contextBridge.exposeInMainWorld('api', {
 
   // M5 thinking bubbles (streamed from main)
   thinkNow: (todoId: string) => ipcRenderer.invoke('think:now', todoId),
+  thinkSessions: (todoId: string) => ipcRenderer.invoke('think:sessions', todoId),
   onThinkBubble: (cb: (b: unknown) => void) => {
     const h = (_e: Electron.IpcRendererEvent, b: unknown): void => { cb(b) }
     ipcRenderer.on('think:bubble', h)
     return () => { ipcRenderer.removeListener('think:bubble', h) }
   },
-  onThinkRemove: (cb: (idx: number) => void) => {
-    const h = (_e: Electron.IpcRendererEvent, idx: number): void => { cb(idx) }
+  onThinkRemove: (cb: (p: { idx: number; sid: string }) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, p: { idx: number; sid: string }): void => { cb(p) }
     ipcRenderer.on('think:remove', h)
     return () => { ipcRenderer.removeListener('think:remove', h) }
   },
+  onThinkMeta: (cb: (m: { sid: string; rawAnswer: string }) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, m: { sid: string; rawAnswer: string }): void => { cb(m) }
+    ipcRenderer.on('think:meta', h)
+    return () => { ipcRenderer.removeListener('think:meta', h) }
+  },
+  // report the speech-bubble stack's window-rect so main can make that area interactive (click a bubble)
+  sendBubblesRect: (rect: { x: number; y: number; w: number; h: number } | null) => ipcRenderer.send('bubbles:rect', rect),
   onThinkClear: (cb: () => void) => {
     const h = (): void => { cb() }
     ipcRenderer.on('think:clear', h)
