@@ -56,11 +56,11 @@ const charCount = (t: string): number => t.replace(/\s/g, '').length
 
 // Schedule each bubble's appear + fade. All timings derive from char count (clamped) × timeScale.
 // rawAnswer = the full stage-1 plan, sent up-front so clicking any bubble can show the full text.
-function streamBubbles(win: BrowserWindow, sid: string, bubbles: Bubble[], timeScale: number, rawAnswer = ''): void {
+function streamBubbles(win: BrowserWindow, sid: string, bubbles: Bubble[], timeScale: number, rawAnswer = '', todoId?: string): void {
   if (win.isDestroyed()) return
   clearTimers()
   win.webContents.send('think:clear')          // reset any leftover from a prior session
-  win.webContents.send('think:meta', { sid, rawAnswer })   // full transcript for click-bubble→full-text
+  win.webContents.send('think:meta', { sid, rawAnswer, todoId })   // full transcript + todoId for click-bubble→notebook
   dlog('think:start', { sid, n: bubbles.length, timeScale })
 
   let appearAt = 0
@@ -121,5 +121,5 @@ export async function streamRealThinking(
     try { await addThinkingSession(s) } catch (e) { dlog('think:persist-error', { err: String(e) }) }
   }
   if (win.isDestroyed()) return
-  streamBubbles(win, res.sessionId, res.bubbles, timeScale, res.rawAnswer)
+  streamBubbles(win, res.sessionId, res.bubbles, timeScale, res.rawAnswer, todoId)
 }

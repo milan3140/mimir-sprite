@@ -29,10 +29,10 @@ interface AppStore {
   fadeBubble: (idx: number, sid?: string) => void
   removeBubble: (idx: number, sid?: string) => void
   clearBubbles: () => void
-  // full stage-1 plan for the current session (click a bubble → show it)
-  transcript: { sid: string; rawAnswer: string } | null
+  // full stage-1 plan for the current session (click a bubble → open notebook or show overlay)
+  transcript: { sid: string; rawAnswer: string; todoId?: string } | null
   transcriptOpen: boolean
-  setTranscript: (t: { sid: string; rawAnswer: string }) => void
+  setTranscript: (t: { sid: string; rawAnswer: string; todoId?: string }) => void
   setTranscriptOpen: (v: boolean) => void
   applySnapshot: (snap: StoreSnapshot) => void
 }

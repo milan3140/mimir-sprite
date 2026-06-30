@@ -44,7 +44,7 @@ declare global {
       thinkSessions: (todoId: string) => Promise<ThinkingSession[]>   // persisted transcripts for a todo
       onThinkBubble: (cb: (b: Bubble) => void) => () => void
       onThinkRemove: (cb: (p: { idx: number; sid: string }) => void) => () => void
-      onThinkMeta: (cb: (m: { sid: string; rawAnswer: string }) => void) => () => void
+      onThinkMeta: (cb: (m: { sid: string; rawAnswer: string; todoId?: string }) => void) => () => void
       sendBubblesRect: (rect: { x: number; y: number; w: number; h: number } | null) => void
       onThinkClear: (cb: () => void) => () => void
       // Notebook IPC (S1)

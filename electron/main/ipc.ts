@@ -9,7 +9,7 @@ import {
 import { saveImageAttachment, readAttachmentDataUrl } from './attachments'
 import { streamRealThinking } from './thinking'
 import { openNotebook, broadcastNotebook } from './notebookManager'
-import { sendNotebookMessage } from './notebookChat'
+import { sendNotebookMessage, appendThinkingToDefaultNotebook } from './notebookChat'
 import type { StoreSnapshot } from '../../src/shared/types'
 
 export function setupIpc(win: BrowserWindow): void {
@@ -38,10 +38,16 @@ export function setupIpc(win: BrowserWindow): void {
   ipcMain.handle('panel:resize', (_e, w: number, h: number) => setPanelSize(w, h))
 
   // M5: manual 🧠 — run the two-stage ClaudeRunner for one todo, stream the bubbles, PERSIST the session.
+  // S5: after thinking, auto-append the plan to the default notebook so clicking a bubble opens the window.
   ipcMain.handle('think:now', async (_e, id: string) => {
     const todo = getTodos().find((t) => t.id === id)
     if (!todo) { dlog('think:now-missing', { id }); return }
     await streamRealThinking(win, todo.title, todo.notes ?? '', 1, todo.id, 'manual')
+    const sessions = getThinkingSessions(todo.id)
+    const last = sessions[sessions.length - 1]
+    if (last?.rawAnswer) {
+      await appendThinkingToDefaultNotebook(todo.id, last.rawAnswer, last.costUsd ?? 0, broadcastNotebook)
+    }
   })
   // M5 transcript view (Task 4): the persisted thinking sessions for a todo (rawAnswer = full stage-1 plan).
   ipcMain.handle('think:sessions', (_e, todoId: string) => getThinkingSessions(todoId))

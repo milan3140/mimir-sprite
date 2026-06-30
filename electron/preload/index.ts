@@ -82,8 +82,8 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('think:remove', h)
     return () => { ipcRenderer.removeListener('think:remove', h) }
   },
-  onThinkMeta: (cb: (m: { sid: string; rawAnswer: string }) => void) => {
-    const h = (_e: Electron.IpcRendererEvent, m: { sid: string; rawAnswer: string }): void => { cb(m) }
+  onThinkMeta: (cb: (m: { sid: string; rawAnswer: string; todoId?: string }) => void) => {
+    const h = (_e: Electron.IpcRendererEvent, m: { sid: string; rawAnswer: string; todoId?: string }): void => { cb(m) }
     ipcRenderer.on('think:meta', h)
     return () => { ipcRenderer.removeListener('think:meta', h) }
   },

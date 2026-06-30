@@ -89,7 +89,20 @@ export function SpeechBubbleStack({ edge }: { edge: string }) {
     <div ref={ref} className="bubble-stack" style={style}>
       {showOverlay
         ? <TranscriptOverlay rawAnswer={transcript!.rawAnswer} onClose={() => setTranscriptOpen(false)} />
-        : list.map((b) => <SpeechBubble key={`${b.sessionId}:${b.idx}`} b={b} tail={tail} onClick={() => setTranscriptOpen(true)} />)
+        : list.map((b) => (
+          <SpeechBubble
+            key={`${b.sessionId}:${b.idx}`} b={b} tail={tail}
+            onClick={() => {
+              // S5: open the default notebook window if we know which todo this session belongs to;
+              // ponytail: fall back to inline overlay for mock/dev paths that have no todoId.
+              if (transcript?.todoId) {
+                window.api.notebookOpenDefault(transcript.todoId)
+              } else {
+                setTranscriptOpen(true)
+              }
+            }}
+          />
+        ))
       }
     </div>
   )

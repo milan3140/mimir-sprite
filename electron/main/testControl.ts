@@ -4,8 +4,9 @@ import { writeFileSync, mkdirSync, unlinkSync } from 'fs'
 import { join } from 'path'
 import { dlog } from './debugLog'
 import { streamMockThinking, streamRealThinking } from './thinking'
-import { addTodo, setPanelSize, getOrCreateDefaultNotebook } from './store'
-import { openNotebook, getNotebookWindow } from './notebookManager'
+import { addTodo, setPanelSize, getOrCreateDefaultNotebook, getThinkingSessions } from './store'
+import { openNotebook, getNotebookWindow, broadcastNotebook } from './notebookManager'
+import { appendThinkingToDefaultNotebook } from './notebookChat'
 
 // ⚠️ FIDELITY CAVEAT (important): injected input is NOT a faithful substitute for a real mouse. A real
 // grab/click goes OS cursor → Windows hit-test → setIgnoreMouseEvents (click-through) → renderer.
@@ -105,6 +106,21 @@ async function handle(win: BrowserWindow, sock: Socket, line: string): Promise<v
     // exercises the real ClaudeRunner→parse→stream pipeline (use with MIMIR_FAKE_CLAUDE=1 for no spend)
     void streamRealThinking(win, rest || '測試任務', '', 0.06)
     sock.write('OK\n')
+  } else if (cmd === 'thinknowfull') {
+    // S5 e2e: create todo → streamRealThinking (with todoId) → appendThinkingToDefaultNotebook.
+    // Returns OK <notebookId> once the notebook has the plan. Use with MIMIR_FAKE_CLAUDE=1.
+    const todo = await addTodo(rest || '思考測試任務')
+    await streamRealThinking(win, todo.title, todo.notes ?? '', 0.06, todo.id, 'manual')
+    const sessions = getThinkingSessions(todo.id)
+    const last = sessions[sessions.length - 1]
+    let nbId: string
+    if (last?.rawAnswer) {
+      nbId = await appendThinkingToDefaultNotebook(todo.id, last.rawAnswer, last.costUsd ?? 0, broadcastNotebook)
+    } else {
+      const nb = await getOrCreateDefaultNotebook(todo.id)
+      nbId = nb.id
+    }
+    sock.write('OK ' + nbId + '\n')
   } else if (cmd === 'addtodo') {
     await addTodo(rest || '測試待辦')
     sock.write('OK\n')
@@ -122,6 +138,10 @@ async function handle(win: BrowserWindow, sock: Socket, line: string): Promise<v
     const { getNotebook } = await import('./store')
     const updated = getNotebook(nbId)
     sock.write('OK ' + (updated?.messages.length ?? 0) + '\n')
+  } else if (cmd === 'opennotebook') {
+    // open a notebook window by id (pair with thinknowfull for S5 visual verification)
+    openNotebook(args[0] ?? '')
+    sock.write('OK\n')
   } else if (cmd === 'notebooknew') {
     // create todo + default notebook + open window; returns notebookId (for notebookshot)
     const todo = await addTodo(rest || '筆記本測試')
