@@ -32,18 +32,24 @@ export interface ThinkingSession {
   error?: string
 }
 
-// Per-todo notebook (human-typed thoughts; docs/10). Reserved/typed now so removeTodo can cascade them.
+// Per-todo notebook = a persisted Claude CHAT SESSION shown in a floating window (M4 ⊕ M5).
+// The default notebook's first message is the 🧠 thinking plan; further messages are chat with Claude.
 export interface NoteMessage {
   id: string
+  role: 'user' | 'assistant'        // 'assistant' = Claude
+  kind?: 'thinking' | 'chat'        // 'thinking' = the stage-1 pre-task plan (auto first message); else chat
   text: string
   createdAt: number
+  costUsd?: number                  // assistant turns record their spend
   attachments?: Attachment[]
-  author?: 'user' | 'assistant'
+  pending?: boolean                 // assistant placeholder while Claude is working (replaced on completion)
 }
 export interface Notebook {
   id: string
   todoId: string
   title: string
+  sessionId: string                 // claude --session-id for this notebook's chat continuity (--resume)
+  isDefault?: boolean               // the auto-created default notebook (holds the thinking plan)
   createdAt: number
   updatedAt: number
   messages: NoteMessage[]

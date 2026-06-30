@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto'
 import { dlog } from './debugLog'
 import { deleteAttachmentsForOwner } from './attachments'
 import { DEFAULT_PANEL_W, DEFAULT_PANEL_H, clampPanel } from '../../src/shared/geometry'
-import type { DB, Todo, AppMode, StoreSnapshot, Attachment, ThinkingSession, ThinkSettings } from '../../src/shared/types'
+import type { DB, Todo, AppMode, StoreSnapshot, Attachment, ThinkingSession, ThinkSettings, Notebook, NoteMessage } from '../../src/shared/types'
 
 const SCHEMA_VERSION = 2
 
@@ -172,6 +172,77 @@ export function getThinkingSessions(todoId: string): ThinkingSession[] {
 
 export function getThinkingSession(id: string): ThinkingSession | undefined {
   return (db?.data.thinkingSessions ?? []).find(s => s.id === id)
+}
+
+// --- Notebooks (a notebook = a persisted Claude chat session; M4 ⊕ M5) ---
+// The store stays pure CRUD (save + snapshot broadcast for row counts via Todo.notebookIds). Pushing the
+// full notebook to its open floating window is the IPC layer's job (event 'notebook:updated').
+export async function createNotebook(todoId: string, opts: { title?: string; isDefault?: boolean } = {}): Promise<Notebook> {
+  if (!db) throw new Error('store not init')
+  const nb: Notebook = {
+    id: randomUUID(), todoId, sessionId: randomUUID(),
+    title: opts.title ?? (opts.isDefault ? '想法筆記本' : '新筆記本'),
+    isDefault: opts.isDefault, createdAt: Date.now(), updatedAt: Date.now(),
+    messages: [], archived: false,
+  }
+  db.data.notebooks.push(nb)
+  const t = db.data.todos.find(x => x.id === todoId)
+  if (t && !t.notebookIds.includes(nb.id)) t.notebookIds.push(nb.id)
+  await save(); broadcast()
+  dlog('notebook:create', { id: nb.id, todoId, isDefault: !!nb.isDefault })
+  return nb
+}
+
+export function getNotebooks(todoId: string): Notebook[] {
+  return (db?.data.notebooks ?? []).filter(n => n.todoId === todoId && !n.archived)
+}
+
+export function getNotebook(id: string): Notebook | undefined {
+  return (db?.data.notebooks ?? []).find(n => n.id === id)
+}
+
+// idempotent: one default notebook per todo (holds the 🧠 thinking plan). Reused across thinks.
+export async function getOrCreateDefaultNotebook(todoId: string): Promise<Notebook> {
+  const existing = (db?.data.notebooks ?? []).find(n => n.todoId === todoId && n.isDefault && !n.archived)
+  return existing ?? createNotebook(todoId, { isDefault: true })
+}
+
+export async function addNotebookMessage(id: string, msg: NoteMessage): Promise<Notebook | undefined> {
+  if (!db) return undefined
+  const nb = db.data.notebooks.find(n => n.id === id)
+  if (!nb) return undefined
+  nb.messages.push(msg)
+  nb.updatedAt = Date.now()
+  await save(); broadcast()
+  return nb
+}
+
+// patch an existing message (e.g. replace a 'pending' assistant placeholder with the real reply).
+export async function patchNotebookMessage(id: string, msgId: string, patch: Partial<NoteMessage>): Promise<Notebook | undefined> {
+  if (!db) return undefined
+  const nb = db.data.notebooks.find(n => n.id === id)
+  if (!nb) return undefined
+  const m = nb.messages.find(x => x.id === msgId)
+  if (m) Object.assign(m, patch)
+  nb.updatedAt = Date.now()
+  await save(); broadcast()
+  return nb
+}
+
+export async function setNotebookWindowState(id: string, ws: { x: number; y: number; w: number; h: number }): Promise<void> {
+  if (!db) return
+  const nb = db.data.notebooks.find(n => n.id === id)
+  if (!nb) return
+  nb.windowState = ws
+  await save()
+}
+
+export async function archiveNotebook(id: string): Promise<void> {
+  if (!db) return
+  const nb = db.data.notebooks.find(n => n.id === id)
+  if (!nb) return
+  nb.archived = true
+  await save(); broadcast()
 }
 
 // --- Todo CRUD ---
