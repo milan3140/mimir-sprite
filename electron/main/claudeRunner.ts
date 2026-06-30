@@ -210,3 +210,42 @@ export async function runThinking(title: string, notes: string): Promise<ThinkRe
     return { bubbles: [{ idx: 0, tag: '第一步', text: '我想得不太順,等等再試', sessionId }], rawAnswer: '', costUsd: 0, sessionId, error: String(e) }
   }
 }
+
+// --- Notebook chat (M4 ⊕ M5): ONE Claude turn given the notebook's conversation as context. ---
+// The conversation is passed IN the prompt (not via --resume) so it's robust regardless of how the first
+// message was made (thinking flow vs chat) and across our stateless spawns. Read-only + web, like thinking.
+export interface ChatResult { text: string; costUsd: number }
+export type ChatHistory = { role: 'user' | 'assistant'; text: string }[]
+
+function chatWorkCwd(): string {
+  const vault = knowledgeVault()
+  if (vault && existsSync(vault)) return vault
+  const cwd = join(app.getPath('userData'), 'mimir-sprite', 'thinking')
+  try { mkdirSync(cwd, { recursive: true }) } catch { /* exists */ }
+  return cwd
+}
+
+function chatPrompt(todoTitle: string, history: ChatHistory, userText: string): string {
+  const convo = history.map(m => `${m.role === 'user' ? '使用者' : '你(Claude)'}:${m.text}`).join('\n\n')
+  return [
+    `你是使用者的桌面助理貓,在「${todoTitle}」這個待辦的筆記本裡跟使用者對話。背景:${userContext()}。`,
+    '回答精簡、實用、可立即行動、用繁體中文。需要會變動的事實(價格 / 法規 / 最新做法 / 供應商)時用 WebSearch 查證並標 (來源:URL);查不到就標 (估)。',
+    history.length ? `【先前對話】\n${convo}` : '',
+    `【使用者剛說】\n${userText}`,
+    '直接回覆使用者:',
+  ].filter(Boolean).join('\n\n')
+}
+
+export async function runChat(todoTitle: string, history: ChatHistory, userText: string): Promise<ChatResult> {
+  if (process.env.MIMIR_FAKE_CLAUDE === '1') return { text: `(fake reply) 收到:「${userText.slice(0, 30)}」`, costUsd: 0 }
+  const cwd = chatWorkCwd()
+  const prompt = chatPrompt(todoTitle, history, userText)
+  try {
+    const r = await spawnClaude(prompt, randomUUID(), false, cwd)
+    return { text: r.result, costUsd: r.costUsd }
+  } catch (e) {
+    dlog('chat:retry', { err: String(e) })
+    const r = await spawnClaude(prompt, randomUUID(), false, cwd)
+    return { text: r.result, costUsd: r.costUsd }
+  }
+}
